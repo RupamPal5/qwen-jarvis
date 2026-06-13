@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+
+  --color-background: #03040a;
+  --color-foreground: #e6f9ff;
+
+  --color-card: #0a0e1a;
+  --color-card-foreground: #e6f9ff;
+
+  --color-muted: #131829;
+  --color-muted-foreground: #8a93b2;
+
+  --color-border: #1c2440;
+
+  /* Brand accents */
+  --color-cyan: #00d4ff;
+  --color-cyan-soft: #5ee7ff;
+  --color-purple: #8b5cf6;
+  --color-purple-soft: #b794ff;
+
+  /* Status */
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+
+  --radius: 1.5rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    background-color: var(--color-background);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+}
+
+/* Animated gradient backdrop */
+@keyframes aurora {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translate3d(4%, -3%, 0) scale(1.15);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.55;
+  }
+}
+
+.aurora-blob {
+  animation: aurora 16s ease-in-out infinite;
+}
+
+@keyframes scanline {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+.scanline {
+  animation: scanline 7s linear infinite;
+}
+
+/* Glitch effect */
+@keyframes glitch-shift {
+  0%,
+  92%,
+  100% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+  93% {
+    transform: translate(-2px, 1px);
+    opacity: 0.9;
+  }
+  95% {
+    transform: translate(2px, -1px);
+    opacity: 0.85;
+  }
+  97% {
+    transform: translate(-1px, 2px);
+    opacity: 0.9;
+  }
+}
+
+.glitch-layer {
+  animation: glitch-shift 4.5s infinite;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-cyan) 35%, transparent);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-cyan) 60%, transparent);
+}
+
+.glow-cyan {
+  box-shadow: 0 0 20px color-mix(in srgb, var(--color-cyan) 45%, transparent),
+    0 0 60px color-mix(in srgb, var(--color-cyan) 18%, transparent);
+}
+
+.glow-purple {
+  box-shadow: 0 0 20px color-mix(in srgb, var(--color-purple) 45%, transparent),
+    0 0 60px color-mix(in srgb, var(--color-purple) 18%, transparent);
+}
+
+.text-glow-cyan {
+  text-shadow: 0 0 14px color-mix(in srgb, var(--color-cyan) 70%, transparent),
+    0 0 34px color-mix(in srgb, var(--color-cyan) 35%, transparent);
+}
+
+.text-glow-purple {
+  text-shadow: 0 0 14px color-mix(in srgb, var(--color-purple) 70%, transparent),
+    0 0 34px color-mix(in srgb, var(--color-purple) 35%, transparent);
+}
