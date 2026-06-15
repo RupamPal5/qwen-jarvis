@@ -486,7 +486,7 @@ const MemoryConnectionLine: React.FC<{
   }, [sourcePos, targetPos]);
 
   return (
-    <RechartsLine
+    <DreiLine
       points={points}
       color={connection.color}
       lineWidth={connection.strength / 50}
@@ -848,7 +848,7 @@ export default function MemoryPalace() {
   const [selectedMemory, setSelectedMemory] = useState<string | null>(null);
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
   const [hoveredMemory, setHoveredMemory] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"3d" | "analytics" | "list">("3d");
+  const [viewMode, setViewMode] = useState<"3d" | "analytics" | "list">("list");
   const [filter, setFilter] = useState<MemoryFilter>({
     types: [],
     emotions: [],
@@ -1064,36 +1064,35 @@ export default function MemoryPalace() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="relative h-[700px] bg-black/40 border border-purple-500/30 rounded-2xl overflow-hidden"
+            className="relative h-[700px] rounded-2xl overflow-hidden flex items-center justify-center"
+            style={{ background: "radial-gradient(ellipse at center, #1a0533 0%, #0a0014 60%, #000 100%)" }}
           >
-            <Canvas camera={{ position: [0, 0, 150], fov: 60 }}>
-              <Suspense fallback={null}>
-                <MemoryScene
-                  memories={memories}
-                  connections={connections}
-                  clusters={clusters}
-                  selectedMemory={selectedMemory}
-                  selectedCluster={selectedCluster}
-                  onSelectMemory={handleSelectMemory}
-                  onSelectCluster={handleSelectCluster}
-                  onHoverMemory={handleHoverMemory}
-                  filter={filter}
+            <div className="absolute inset-0 pointer-events-none">
+              {memories.slice(0, 40).map((m, i) => (
+                <div
+                  key={m.id}
+                  className="absolute rounded-full opacity-70 transition-all duration-1000"
+                  style={{
+                    width: `${m.size * 6}px`,
+                    height: `${m.size * 6}px`,
+                    left: `${((m.position.x + 80) / 160) * 100}%`,
+                    top: `${((m.position.y + 80) / 160) * 100}%`,
+                    background: `radial-gradient(circle, ${m.color}cc, ${m.color}22)`,
+                    boxShadow: `0 0 ${m.size * 4}px ${m.color}88`,
+                    transform: "translate(-50%, -50%)",
+                  }}
                 />
-              </Suspense>
-            </Canvas>
-
-            {/* Overlay Info */}
+              ))}
+            </div>
+            <div className="relative z-10 text-center">
+              <div className="text-4xl font-bold text-purple-300 mb-2">{memories.length}</div>
+              <div className="text-sm text-white/50">Memory Nodes</div>
+              <div className="mt-4 text-xs text-white/30">Switch to List or Analytics for full interaction</div>
+            </div>
             <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-xl border border-white/10 rounded-lg p-3">
               <div className="text-xs text-white/60 mb-1">Total Memories</div>
               <div className="text-lg font-bold text-purple-400">{memories.length}</div>
             </div>
-
-            {hoveredMemory && (
-              <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-xl border border-purple-500/30 rounded-lg p-3">
-                <div className="text-xs text-white/60 mb-1">Hovered Memory</div>
-                <div className="text-sm font-bold text-white">{memories.find(m => m.id === hoveredMemory)?.title}</div>
-              </div>
-            )}
           </motion.div>
         )}
 

@@ -454,6 +454,7 @@ export default function CouncilOfThree() {
   const [debateHistory, setDebateHistory] = useState<DebateSession[]>([]);
   
   const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
+  const nextPersonaRef = useRef<PersonaRole | null>(null);
 
   // Initialize a new debate session
   const startDebate = useCallback((scenario: DebateScenario) => {
@@ -490,7 +491,7 @@ export default function CouncilOfThree() {
         const newArgs = [...prev.arguments];
         const newMetrics = { ...prev.metrics };
         let nextPhase = prev.phase;
-        let nextPersona = activePersona;
+        let nextPersona: PersonaRole | null = activePersona;
 
         // Phase Machine
         if (prev.phase === "PROPOSAL" && newArgs.length === 0) {
@@ -570,10 +571,12 @@ export default function CouncilOfThree() {
             }
           };
           
+          nextPersonaRef.current = nextPersona;
           setDebateHistory(h => [completedSession, ...h]);
           return completedSession;
         }
 
+        nextPersonaRef.current = nextPersona;
         return {
           ...prev,
           phase: nextPhase,
@@ -582,7 +585,7 @@ export default function CouncilOfThree() {
         };
       });
       
-      setActivePersona(nextPersona);
+      setActivePersona(nextPersonaRef.current);
     };
 
     // Timing for auto-play

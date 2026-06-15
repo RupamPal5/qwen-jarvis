@@ -1,10 +1,31 @@
-"use client";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { motion, AnimatePresence, useAnimation } from "framer-motion";
 import {
-  motion, AnimatePresence, useAnimation
-} from "framer-motion";
-import {
-  Terminal, Maximize2, Minimize2, X, ChevronRight, ChevronLeft, ChevronUp, ChevronDown, Search, Filter, Settings, Bell, BellOff, Cpu, MemoryStick, HardDrive, Network, Wifi, WifiOff, Shield, Lock, Unlock, Key, Fingerprint, Eye, EyeOff, Activity, Zap, AlertTriangle, AlertCircle, CheckCircle, Info, HelpCircle, Clock, Calendar, User, Users, Folder, FolderOpen, FileText, FileCode, FileJson, FileImage, FileArchive, Download, Upload, Trash2, Edit, Save, Copy, Clipboard, Scissors, Play, Pause, StopCircle, SkipForward, SkipBack, RotateCcw, GitBranch, GitCommit, GitPullRequest, Database, Server, Cloud, CloudOff, CloudUpload, CloudDownload, Rocket, Flame, Snowflake, Sun, Moon, Star, Heart, ThumbsUp, ThumbsDown, Award, Trophy, Target, Flag, MapPin, Navigation, Compass, Globe, Satellite, Radio, Signal, Volume2, VolumeX, Mic, MicOff, Camera, CameraOff, Video, VideoOff, Phone, Mail, AtSign, Hash, Binary, Code, Code2, Braces, Command, Layers, Box, Package, Grid, List, Table, Columns, Rows, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, Strikethrough, Type, Heading, Sparkles, Wand2, Crown, Gem, Diamond, Feather, Anchor, Briefcase, Coffee, CupSoda, Pizza, Beer, Wine, Carrot, Apple, Banana, Grape, Cherry, Dog, Cat, Bird, Fish, Bug, Snail, Turtle, Rabbit, Panda, Shrimp, Worm
+  Terminal, Maximize2, Minimize2, X, ChevronRight, ChevronLeft,
+  ChevronUp, ChevronDown, Search, Filter, Settings, Bell,
+  BellOff, Cpu, MemoryStick, HardDrive, Network, Wifi,
+  WifiOff, Shield, Lock, Unlock, Key, Fingerprint,
+  Eye, EyeOff, Activity, Zap, AlertTriangle, AlertCircle,
+  CheckCircle, Info, HelpCircle, Clock, Calendar, User,
+  Users, Folder, FolderOpen, FileText, FileCode, FileJson,
+  FileImage, FileArchive, Download, Upload, Trash2, Edit,
+  Save, Copy, Clipboard, Scissors, Play, Pause,
+  StopCircle, SkipForward, SkipBack, RotateCcw, GitBranch, GitCommit,
+  GitPullRequest, Database, Server, Cloud, CloudOff, CloudUpload,
+  CloudDownload, Rocket, Flame, Snowflake, Sun, Moon,
+  Star, Heart, ThumbsUp, ThumbsDown, Award, Trophy,
+  Target, Flag, MapPin, Navigation, Compass, Globe,
+  Satellite, Radio, Signal, Volume2, VolumeX, Mic,
+  MicOff, Camera, CameraOff, Video, VideoOff, Phone,
+  Mail, AtSign, Hash, Binary, Code, Code2,
+  Braces, Command, Layers, Box, Package, Grid,
+  List, Table, Columns, Rows, AlignLeft, AlignCenter,
+  AlignRight, Bold, Italic, Underline, Strikethrough, Type,
+  Heading, Sparkles, Wand2, Crown, Gem, Diamond,
+  Feather, Anchor, Briefcase, Coffee, CupSoda, Pizza,
+  Beer, Wine, Carrot, Apple, Banana, Grape,
+  Cherry, Dog, Cat, Bird, Fish, Bug,
+  Snail, Turtle, Rabbit, Panda, Shrimp, Worm,
 } from "lucide-react";
 
 // ============================================================================
@@ -1784,16 +1805,6 @@ const COMMANDS: Record<string, CommandDefinition> = {
     category: "system",
     execute: async () => "job moved to foreground.",
   },
-  "kill": {
-    name: "kill",
-    description: "Send a signal to a job",
-    usage: "kill [-s sigspec | -n signum | -sigspec] [pid | jobspec] ...",
-    category: "system",
-    execute: async (args) => {
-      if (args.length === 0) return "kill: usage: kill [-s sigspec | -n signum | -sigspec] pid | jobspec ...";
-      return `signal sent to job ${args[0]}`;
-    },
-  },
   "getopts": {
     name: "getopts",
     description: "Parse option arguments",
@@ -1896,92 +1907,6 @@ const COMMANDS: Record<string, CommandDefinition> = {
     usage: "test expression",
     category: "system",
     execute: async () => "expression evaluated.",
-  },
-  "true": {
-    name: "true",
-    description: "Do nothing, successfully",
-    usage: "true",
-    category: "system",
-    execute: async () => "",
-  },
-  "false": {
-    name: "false",
-    description: "Do nothing, unsuccessfully",
-    usage: "false",
-    category: "system",
-    execute: async () => {
-      throw new Error("false");
-    },
-  },
-  "yes": {
-    name: "yes",
-    description: "Output a string repeatedly until killed",
-    usage: "yes [string]",
-    category: "fun",
-    execute: async (args) => {
-      const str = args.join(" ") || "y";
-      return `${str}\n${str}\n${str}\n[Output truncated]`;
-    },
-  },
-  "seq": {
-    name: "seq",
-    description: "Print a sequence of numbers",
-    usage: "seq [first [increment]] last",
-    category: "system",
-    execute: async (args) => {
-      if (args.length === 0) return "seq: missing operand";
-      const last = parseInt(args[args.length - 1]);
-      if (isNaN(last)) return "seq: invalid number";
-      return Array.from({ length: Math.min(last, 20) }, (_, i) => i + 1).join("\n");
-    },
-  },
-  "factor": {
-    name: "factor",
-    description: "Print prime factors",
-    usage: "factor [number]",
-    category: "system",
-    execute: async (args) => {
-      if (args.length === 0) return "factor: missing operand";
-      const num = parseInt(args[0]);
-      if (isNaN(num)) return "factor: invalid number";
-      const factors = [];
-      let n = num;
-      for (let i = 2; i <= n; i++) {
-        while (n % i === 0) {
-          factors.push(i);
-          n /= i;
-        }
-      }
-      return `${num}: ${factors.join(" ")}`;
-    },
-  },
-  "bc": {
-    name: "bc",
-    description: "An arbitrary precision calculator language",
-    usage: "bc [options] [file]",
-    category: "system",
-    execute: async () => "bc calculator simulated.",
-  },
-  "dc": {
-    name: "dc",
-    description: "An arbitrary precision calculator",
-    usage: "dc [options] [file]",
-    category: "system",
-    execute: async () => "dc calculator simulated.",
-  },
-  "expr": {
-    name: "expr",
-    description: "Evaluate expressions",
-    usage: "expr expression",
-    category: "system",
-    execute: async (args) => {
-      if (args.length === 0) return "expr: missing operand";
-      try {
-        return String(Function('"use strict";return (' + args.join(" ") + ')')());
-      } catch {
-        return "expr: syntax error";
-      }
-    },
   },
 };
 
