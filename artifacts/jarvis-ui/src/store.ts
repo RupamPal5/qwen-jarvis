@@ -64,6 +64,8 @@ interface JarvisState {
   // System Status
   systemStatus: SystemStatus;
   audioAmplitude: number;
+  ollamaOnline: boolean | null;
+  ollamaModelCount: number;
 
   // Data
   cpuLoad: number;
@@ -95,6 +97,7 @@ interface JarvisState {
   setTheme: (theme: ThemeId) => void;
   setSystemStatus: (status: SystemStatus) => void;
   setAudioAmplitude: (amp: number) => void;
+  setOllamaStatus: (online: boolean | null, modelCount?: number) => void;
 }
 
 export const useStore = create<JarvisState>()(
@@ -111,6 +114,8 @@ export const useStore = create<JarvisState>()(
       theme: 'cyberpunk',
       systemStatus: 'OFFLINE',
       audioAmplitude: 0,
+      ollamaOnline: null,
+      ollamaModelCount: 0,
 
       cpuLoad: 42,
       energyLevel: 85,
@@ -145,6 +150,7 @@ export const useStore = create<JarvisState>()(
       setTheme: (theme) => set({ theme }),
       setSystemStatus: (status) => set({ systemStatus: status }),
       setAudioAmplitude: (amp) => set({ audioAmplitude: amp }),
+      setOllamaStatus: (online, modelCount = 0) => set({ ollamaOnline: online, ollamaModelCount: modelCount }),
     }),
     {
       name: 'jarvis-god-protocol-storage',

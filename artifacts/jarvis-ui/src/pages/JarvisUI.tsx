@@ -489,7 +489,7 @@ export default function JarvisUI() {
 
   const metrics = useSystemMetrics();
   const notificationSystem = useNotifications();
-  const { messages, addMessage, theme, setTheme, systemStatus, setSystemStatus, setAudioAmplitude } = useStore();
+  const { messages, addMessage, theme, setTheme, systemStatus, setSystemStatus, setAudioAmplitude, ollamaOnline, ollamaModelCount } = useStore();
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -904,8 +904,9 @@ export default function JarvisUI() {
                 ? "border-emerald-500/50 text-emerald-400 bg-emerald-950/40"
                 : systemStatus === "BOOTING"
                 ? "border-yellow-500/50 text-yellow-400 bg-yellow-950/40"
-                : "border-white/15 text-white/30 bg-black/30 hover:border-purple-500/40 hover:text-purple-400"
+                : "border-white/15 text-white/30 bg-black/30"
             }`}
+            style={systemStatus === "OFFLINE" ? { borderColor: "rgba(255,255,255,0.12)" } : {}}
             onClick={() => setActiveView("initialize")}
             animate={systemStatus === "ONLINE" ? { boxShadow: ["0 0 0px rgba(52,211,153,0)", "0 0 12px rgba(52,211,153,0.4)", "0 0 0px rgba(52,211,153,0)"] } : {}}
             transition={{ repeat: Infinity, duration: 3 }}
@@ -913,7 +914,25 @@ export default function JarvisUI() {
             <div className={`w-1.5 h-1.5 rounded-full ${
               systemStatus === "ONLINE" ? "bg-emerald-400" : systemStatus === "BOOTING" ? "bg-yellow-400 animate-pulse" : "bg-white/20"
             }`} />
-            {systemStatus === "OFFLINE" ? "SYSTEM OFFLINE" : systemStatus === "BOOTING" ? "BOOTING..." : "GOD PROTOCOL ONLINE"}
+            {systemStatus === "OFFLINE" ? "BOOT REQUIRED" : systemStatus === "BOOTING" ? "BOOTING..." : "GOD PROTOCOL ONLINE"}
+          </motion.div>
+
+          {/* Ollama Status Badge */}
+          <motion.div
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono font-bold tracking-widest cursor-pointer transition-all"
+            style={ollamaOnline === true
+              ? { borderColor: "color-mix(in srgb, var(--accent-primary) 45%, transparent)", color: "var(--accent-primary)", background: "color-mix(in srgb, var(--accent-primary) 12%, transparent)" }
+              : { borderColor: "rgba(239,68,68,0.35)", color: "rgba(239,68,68,0.8)", background: "rgba(239,68,68,0.08)" }
+            }
+            onClick={() => setActiveView("chat")}
+            animate={ollamaOnline === true ? { boxShadow: ["0 0 0px transparent", `0 0 10px color-mix(in srgb, var(--accent-primary) 40%, transparent)`, "0 0 0px transparent"] } : {}}
+            transition={{ repeat: Infinity, duration: 4 }}
+            title={ollamaOnline === true ? `Ollama online · ${ollamaModelCount} model${ollamaModelCount !== 1 ? "s" : ""}` : "Ollama offline — click to set up"}
+          >
+            <div className={`w-1.5 h-1.5 rounded-full ${ollamaOnline === true ? "animate-pulse" : ""}`}
+              style={{ background: ollamaOnline === true ? "var(--accent-primary)" : "rgba(239,68,68,0.8)" }}
+            />
+            {ollamaOnline === true ? `AI · ${ollamaModelCount}M` : "AI OFFLINE"}
           </motion.div>
         </div>
         

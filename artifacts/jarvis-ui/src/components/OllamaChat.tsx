@@ -4,8 +4,9 @@ import {
   Brain, Send, RefreshCw, ChevronDown, Zap, CheckCircle,
   AlertCircle, HardDrive, Clock, Sparkles, Code2,
   Copy, Trash2, Bot, User, ChevronUp, Settings2,
-  ExternalLink,
+  ExternalLink, Terminal, Wifi,
 } from "lucide-react";
+import { useStore } from "../store";
 
 interface OllamaModel {
   name: string;
@@ -44,6 +45,8 @@ const SUGGESTED = [
 ];
 
 export default function OllamaChat() {
+  const { setOllamaStatus } = useStore();
+
   const [ollamaUrl, setOllamaUrl] = useState<string>(
     () => localStorage.getItem(LS_URL_KEY) ?? DEFAULT_URL
   );
@@ -77,6 +80,7 @@ export default function OllamaChat() {
       if (!r.ok) throw new Error("bad response");
       const data = await r.json() as { models: OllamaModel[] };
       setOllamaOnline(true);
+      setOllamaStatus(true, data.models?.length ?? 0);
       setModels(data.models ?? []);
       setSelectedModel(prev => {
         if (prev) return prev;
@@ -90,9 +94,10 @@ export default function OllamaChat() {
       });
     } catch {
       setOllamaOnline(false);
+      setOllamaStatus(false, 0);
       setModels([]);
     }
-  }, [ollamaUrl]);
+  }, [ollamaUrl, setOllamaStatus]);
 
   useEffect(() => {
     fetchModels();
@@ -414,30 +419,130 @@ export default function OllamaChat() {
         style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(168,85,247,0.3) transparent" }}
       >
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center py-12">
-            <motion.div animate={{ scale: [1, 1.06, 1] }} transition={{ repeat: Infinity, duration: 3 }}>
-              <Brain className="w-16 h-16 text-purple-500/30 mb-4 mx-auto" />
-            </motion.div>
-            <p className="text-white/40 text-sm font-mono mb-1">JARVIS Neural Interface</p>
-            <p className="text-white/20 text-xs font-mono">
-              {ollamaOnline === false
-                ? "⚠ Ollama offline — click ⚙ to set your laptop's IP"
-                : selectedModel
-                ? `Model: ${formatModel(selectedModel)} • Ready`
-                : "Select a model above to begin"}
-            </p>
-            {ollamaOnline === true && selectedModel && (
-              <div className="mt-6 grid grid-cols-2 gap-2 max-w-md">
-                {SUGGESTED.map(s => (
+          <div className="h-full flex flex-col items-center justify-center py-6 overflow-y-auto">
+            {ollamaOnline === false ? (
+              /* ── Offline Setup Guide ── */
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="w-full max-w-xl space-y-3"
+              >
+                {/* Header */}
+                <div className="flex items-center gap-3 p-4 rounded-2xl border"
+                  style={{ background: "color-mix(in srgb, var(--accent-primary) 8%, transparent)", borderColor: "color-mix(in srgb, var(--accent-primary) 30%, transparent)" }}>
+                  <Wifi className="w-5 h-5 flex-shrink-0" style={{ color: "var(--accent-primary)" }} />
+                  <div>
+                    <p className="text-sm font-mono font-bold" style={{ color: "var(--accent-primary)" }}>OLLAMA NOT DETECTED</p>
+                    <p className="text-[11px] text-white/50 mt-0.5">Follow the steps below to connect your local AI models</p>
+                  </div>
                   <button
-                    key={s}
-                    onClick={() => setInput(s)}
-                    className="px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-purple-950/30 hover:border-purple-500/30 text-xs text-white/50 hover:text-white/80 transition-all text-left"
+                    onClick={() => fetchModels()}
+                    className="ml-auto p-2 rounded-lg border border-white/10 hover:border-white/30 text-white/40 hover:text-white/80 transition-all"
+                    title="Retry connection"
                   >
-                    <Sparkles className="w-3 h-3 inline mr-1.5 text-purple-400" />
-                    {s}
+                    <RefreshCw className="w-4 h-4" />
                   </button>
-                ))}
+                </div>
+
+                {/* Step 1 */}
+                <div className="p-4 rounded-xl border border-white/10 bg-black/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 text-black" style={{ background: "var(--accent-primary)" }}>1</span>
+                    <p className="text-xs font-mono font-bold text-white/80">INSTALL OLLAMA (if not already)</p>
+                  </div>
+                  <p className="text-[11px] text-white/50 mb-2">Download from <span className="font-mono text-white/70">ollama.com</span> → Install on Windows → confirm with:</p>
+                  <div className="flex items-center gap-2 bg-black/50 rounded-lg px-3 py-2 border border-white/10">
+                    <Terminal className="w-3 h-3 text-white/30 flex-shrink-0" />
+                    <code className="text-[11px] font-mono text-emerald-400 flex-1">ollama --version</code>
+                    <button onClick={() => navigator.clipboard.writeText("ollama --version")} className="text-white/20 hover:text-white/60 transition-colors"><Copy className="w-3 h-3" /></button>
+                  </div>
+                </div>
+
+                {/* Step 2 */}
+                <div className="p-4 rounded-xl border border-white/10 bg-black/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 text-black" style={{ background: "var(--accent-primary)" }}>2</span>
+                    <p className="text-xs font-mono font-bold text-white/80">START OLLAMA WITH CORS ENABLED</p>
+                  </div>
+                  <p className="text-[11px] text-white/50 mb-2">Open <strong className="text-white/70">PowerShell</strong> on your laptop and run:</p>
+                  <div className="bg-black/60 rounded-lg px-3 py-2.5 border border-white/10 space-y-1">
+                    <div className="flex items-start gap-2">
+                      <Terminal className="w-3 h-3 text-white/30 flex-shrink-0 mt-0.5" />
+                      <code className="text-[11px] font-mono text-yellow-300 flex-1 leading-relaxed">
+                        $env:OLLAMA_ORIGINS="*"<br />
+                        $env:OLLAMA_HOST="0.0.0.0"<br />
+                        ollama serve
+                      </code>
+                      <button
+                        onClick={() => navigator.clipboard.writeText('$env:OLLAMA_ORIGINS="*"\n$env:OLLAMA_HOST="0.0.0.0"\nollama serve')}
+                        className="text-white/20 hover:text-white/60 transition-colors flex-shrink-0"
+                        title="Copy commands"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-white/30 mt-2">⚠ If Ollama is already running, kill it first: <code className="bg-black/40 px-1 rounded">taskkill /F /IM ollama.exe</code></p>
+                </div>
+
+                {/* Step 3 */}
+                <div className="p-4 rounded-xl border border-white/10 bg-black/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 text-black" style={{ background: "var(--accent-primary)" }}>3</span>
+                    <p className="text-xs font-mono font-bold text-white/80">PULL A MODEL (if you haven't yet)</p>
+                  </div>
+                  <p className="text-[11px] text-white/50 mb-2">In a <strong className="text-white/70">new</strong> PowerShell window:</p>
+                  <div className="flex items-center gap-2 bg-black/50 rounded-lg px-3 py-2 border border-white/10">
+                    <Terminal className="w-3 h-3 text-white/30 flex-shrink-0" />
+                    <code className="text-[11px] font-mono text-emerald-400 flex-1">ollama pull gemma3:12b</code>
+                    <button onClick={() => navigator.clipboard.writeText("ollama pull gemma3:12b")} className="text-white/20 hover:text-white/60 transition-colors"><Copy className="w-3 h-3" /></button>
+                  </div>
+                </div>
+
+                {/* Step 4 */}
+                <div className="p-4 rounded-xl border border-white/10 bg-black/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 text-black" style={{ background: "var(--accent-primary)" }}>4</span>
+                    <p className="text-xs font-mono font-bold text-white/80">SET THE URL IN JARVIS (default is correct)</p>
+                  </div>
+                  <p className="text-[11px] text-white/50 mb-2">Click the ⚙ gear icon above → set URL to:</p>
+                  <div className="flex items-center gap-2 bg-black/50 rounded-lg px-3 py-2 border border-white/10">
+                    <code className="text-[11px] font-mono text-cyan-300 flex-1">http://localhost:11434</code>
+                    <button onClick={() => navigator.clipboard.writeText("http://localhost:11434")} className="text-white/20 hover:text-white/60 transition-colors"><Copy className="w-3 h-3" /></button>
+                  </div>
+                  <p className="text-[10px] text-white/30 mt-2">Then click the <RefreshCw className="w-3 h-3 inline" /> button above to retry.</p>
+                </div>
+              </motion.div>
+            ) : ollamaOnline === null ? (
+              /* ── Connecting ── */
+              <div className="flex flex-col items-center gap-3">
+                <RefreshCw className="w-8 h-8 animate-spin text-white/20" />
+                <p className="text-white/30 text-xs font-mono">Connecting to Ollama…</p>
+              </div>
+            ) : (
+              /* ── Online / Ready ── */
+              <div className="flex flex-col items-center text-center">
+                <motion.div animate={{ scale: [1, 1.06, 1] }} transition={{ repeat: Infinity, duration: 3 }}>
+                  <Brain className="w-14 h-14 mb-4 mx-auto" style={{ color: "color-mix(in srgb, var(--accent-primary) 40%, transparent)" }} />
+                </motion.div>
+                <p className="text-white/40 text-sm font-mono mb-1">JARVIS Neural Interface</p>
+                <p className="text-white/25 text-xs font-mono">
+                  {selectedModel ? `Model: ${formatModel(selectedModel)} • Ready` : "Select a model above to begin"}
+                </p>
+                {selectedModel && (
+                  <div className="mt-6 grid grid-cols-2 gap-2 max-w-md">
+                    {SUGGESTED.map(s => (
+                      <button
+                        key={s}
+                        onClick={() => setInput(s)}
+                        className="px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-white/50 hover:text-white/80 transition-all text-left"
+                      >
+                        <Sparkles className="w-3 h-3 inline mr-1.5" style={{ color: "var(--accent-primary)" }} />
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
