@@ -153,6 +153,7 @@ import { THEMES, applyTheme, type ThemeId } from "../theme";
 import InitializeSystem from "../components/InitializeSystem";
 import XTerminal from "../components/XTerminal";
 import AudioSync from "../components/AudioSync";
+import OllamaChat from "../components/OllamaChat";
 import AdvancedSettings from "../components/AdvancedSettings";
 import Scene3D from "../components/Scene3D";
 import VoiceWaveform from "../components/VoiceWaveform";
@@ -479,7 +480,8 @@ export default function JarvisUI() {
   const [activeView, setActiveView] = useState<string>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [themePanelOpen, setThemePanelOpen] = useState(false);
-  
+  const themePanelRef = useRef<HTMLDivElement>(null);
+
   const metrics = useSystemMetrics();
   const notificationSystem = useNotifications();
   const { messages, addMessage, theme, setTheme, systemStatus, setSystemStatus, setAudioAmplitude } = useStore();
@@ -491,6 +493,18 @@ export default function JarvisUI() {
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  // Click-outside to close theme panel
+  useEffect(() => {
+    if (!themePanelOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (themePanelRef.current && !themePanelRef.current.contains(e.target as Node)) {
+        setThemePanelOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [themePanelOpen]);
   
   useEffect(() => {
     // Attempt WebSocket connection — gracefully handle failure
@@ -724,118 +738,89 @@ export default function JarvisUI() {
     </div>
   );
   
-  const renderSettings = () => (
-    <div className="max-w-4xl mx-auto">
-      <Card glow="purple" size="xl" padding="lg">
-        <h2 className="text-2xl font-bold text-white mb-8 flex items-center gap-3">
-          <Settings className="w-6 h-6 text-purple-400" />
-          System Configuration
-        </h2>
-        
-        <div className="space-y-8">
-          <section>
-            <h3 className="text-lg font-semibold text-white mb-4">Appearance</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-black/30 rounded-lg p-4">
-                <label className="text-sm text-white/60 mb-2 block">Theme</label>
-                <select className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-white">
-                  <option>Dark</option>
-                  <option>Light</option>
-                  <option>Auto</option>
-                </select>
-              </div>
-              <div className="bg-black/30 rounded-lg p-4">
-                <label className="text-sm text-white/60 mb-2 block">Color Scheme</label>
-                <select className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-white">
-                  <option>Cyan</option>
-                  <option>Purple</option>
-                  <option>Green</option>
-                  <option>Orange</option>
-                </select>
-              </div>
-            </div>
-          </section>
-          
-          <section>
-            <h3 className="text-lg font-semibold text-white mb-4">AI Configuration</h3>
-            <div className="space-y-4">
-              <div className="bg-black/30 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm text-white">Model Temperature</label>
-                  <span className="text-sm text-purple-400">0.7</span>
-                </div>
-                <input type="range" min="0" max="2" step="0.1" defaultValue="0.7" className="w-full" />
-              </div>
-              <div className="bg-black/30 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm text-white">Max Tokens</label>
-                  <span className="text-sm text-purple-400">4096</span>
-                </div>
-                <input type="range" min="256" max="8192" step="256" defaultValue="4096" className="w-full" />
-              </div>
-            </div>
-          </section>
-          
-          <section>
-            <h3 className="text-lg font-semibold text-white mb-4">Security</h3>
-            <div className="space-y-3">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" defaultChecked className="w-4 h-4 rounded border-white/20" />
-                <span className="text-sm text-white">Enable Biometric Authentication</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" defaultChecked className="w-4 h-4 rounded border-white/20" />
-                <span className="text-sm text-white">Encrypt All Communications</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" className="w-4 h-4 rounded border-white/20" />
-                <span className="text-sm text-white">Enable Panic Room Mode</span>
-              </label>
-            </div>
-          </section>
-        </div>
-        
-        <div className="flex justify-end gap-4 mt-8">
-          <Button variant="ghost">Reset to Defaults</Button>
-          <Button variant="primary">Save Changes</Button>
-        </div>
-      </Card>
-    </div>
+  const [ollamaUrlVal, setOllamaUrlVal] = useState(
+    () => localStorage.getItem("jarvis_ollama_url") ?? "http://localhost:11434"
   );
+  const saveOllamaUrl = useCallback(() => {
+    localStorage.setItem("jarvis_ollama_url", ollamaUrlVal.replace(/\/+$/, ""));
+    notificationSystem.addNotification({ type: "SUCCESS", title: "Saved", message: "Ollama URL saved — switch to JARVIS AI to connect", duration: 3000 });
+  }, [ollamaUrlVal, notificationSystem]);
+
+  const renderSettings = () => {
+    return (
+      <div className="max-w-3xl mx-auto space-y-6">
+        <Card glow="purple" size="xl" padding="lg">
+          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+            <Brain className="w-5 h-5 text-purple-400" />
+            AI — Ollama Connection
+          </h2>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm text-white/70 font-mono mb-2 block">Ollama URL (your laptop&apos;s IP)</label>
+              <div className="flex gap-2">
+                <input
+                  value={ollamaUrlVal}
+                  onChange={e => setOllamaUrlVal(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && saveOllamaUrl()}
+                  placeholder="http://192.168.1.x:11434"
+                  className="flex-1 bg-black/50 border border-white/10 focus:border-purple-500/50 rounded-lg px-3 py-2 text-white font-mono text-sm outline-none transition-colors"
+                />
+                <Button variant="secondary" onClick={saveOllamaUrl}>Save</Button>
+              </div>
+              <p className="text-xs text-white/30 mt-2 font-mono">
+                1. Run <code className="bg-black/40 px-1 rounded">OLLAMA_HOST=0.0.0.0 ollama serve</code> on your laptop<br/>
+                2. Find your LAN IP: <code className="bg-black/40 px-1 rounded">ipconfig</code> (Windows) or <code className="bg-black/40 px-1 rounded">ip a</code> (Linux/WSL)<br/>
+                3. Enter it above as <code className="bg-black/40 px-1 rounded">http://192.168.x.x:11434</code>
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        <Card glow="cyan" size="xl" padding="lg">
+          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+            <Sliders className="w-5 h-5 text-cyan-400" />
+            Theme
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+            {(Object.values(THEMES) as typeof THEMES[keyof typeof THEMES][]).map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTheme(t.id as ThemeId)}
+                className={`p-4 rounded-xl border text-left transition-all ${theme === t.id ? "border-purple-500/60 bg-purple-950/40" : "border-white/10 bg-black/20 hover:border-white/30"}`}
+              >
+                <div className={`w-full h-2 rounded-full mb-3`} style={{ background: t.id === "cyberpunk" ? "linear-gradient(90deg,#a855f7,#06b6d4)" : t.id === "night" ? "linear-gradient(90deg,#1e3a5f,#0ea5e9)" : t.id === "morning" ? "linear-gradient(90deg,#f59e0b,#fde68a)" : t.id === "winter" ? "linear-gradient(90deg,#bfdbfe,#93c5fd)" : "linear-gradient(90deg,#d97706,#fcd34d)" }} />
+                <div className="text-xs font-mono font-bold text-white/80">{t.name}</div>
+                <div className="text-[10px] text-white/40 mt-0.5">{t.description}</div>
+                {theme === t.id && <CheckCircle className="w-3.5 h-3.5 text-purple-400 mt-2" />}
+              </button>
+            ))}
+          </div>
+        </Card>
+      </div>
+    );
+  };
 
   const navItems = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, group: "core" },
-    { id: "initialize", label: "Initialize System", icon: Power, group: "core" },
-    { id: "xterminal", label: "Live Terminal", icon: Terminal, group: "core" },
-    { id: "audio", label: "Audio FFT Sync", icon: Radio, group: "core" },
-    { id: "chat", label: "Neural Chat", icon: MessageSquare, group: "ai" },
-    { id: "council", label: "Council Debate", icon: Scale, group: "ai" },
-    { id: "voice", label: "Voice Interface", icon: Mic, group: "ai" },
-    { id: "trading", label: "Trading", icon: BarChart3, group: "data" },
-    { id: "swarm", label: "Swarm Network", icon: Network, group: "data" },
-    { id: "blockchain", label: "Blockchain", icon: Shield, group: "data" },
-    { id: "knowledge", label: "Knowledge Graph", icon: Network, group: "data" },
-    { id: "logs", label: "Log Viewer", icon: FileText, group: "sys" },
-    { id: "tasks", label: "Tasks", icon: Kanban, group: "sys" },
-    { id: "security", label: "Security", icon: ShieldAlert, group: "sys" },
-    { id: "memory", label: "Memory Palace", icon: Brain, group: "sys" },
-    { id: "terminal", label: "Terminal Emulator", icon: SquareCode, group: "sys" },
-    { id: "files", label: "File Manager", icon: Folder, group: "sys" },
-    { id: "network", label: "Network Monitor", icon: Network, group: "sys" },
-    { id: "quantum", label: "Quantum Core", icon: Atom, group: "sys" },
-    { id: "iot", label: "IoT Devices", icon: Smartphone, group: "sys" },
-    { id: "biometric", label: "Biometric Auth", icon: Fingerprint, group: "sys" },
-    { id: "circadian", label: "Circadian Sync", icon: Sun, group: "sys" },
-    { id: "panic", label: "Panic Room", icon: AlertOctagon, group: "sys" },
-    { id: "deadman", label: "Dead Man's Switch", icon: Skull, group: "sys" },
-    { id: "settings", label: "Settings", icon: Settings, group: "sys" },
+    { id: "dashboard",   label: "Dashboard",       icon: LayoutDashboard, group: "core" },
+    { id: "initialize",  label: "Boot Sequence",    icon: Power,           group: "core" },
+    { id: "chat",        label: "JARVIS AI",        icon: Brain,           group: "ai"   },
+    { id: "terminal",    label: "Terminal",         icon: SquareCode,      group: "ai"   },
+    { id: "voice",       label: "Voice & Audio",    icon: Mic,             group: "ai"   },
+    { id: "trading",     label: "Trading",          icon: BarChart3,       group: "data" },
+    { id: "swarm",       label: "Swarm Network",    icon: Network,         group: "data" },
+    { id: "blockchain",  label: "Blockchain",       icon: Shield,          group: "data" },
+    { id: "knowledge",   label: "Knowledge Graph",  icon: Database,        group: "data" },
+    { id: "security",    label: "Security",         icon: ShieldAlert,     group: "sys"  },
+    { id: "files",       label: "File Manager",     icon: Folder,          group: "sys"  },
+    { id: "iot",         label: "IoT Devices",      icon: Smartphone,      group: "sys"  },
+    { id: "settings",    label: "Settings",         icon: Settings,        group: "sys"  },
   ];
 
   return (
     <div className="min-h-screen bg-black text-white font-mono overflow-hidden relative">
       <Scene3D />
       
-      <header className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-white/10 bg-black/40 backdrop-blur-xl">
+      <header className="relative z-50 flex items-center justify-between px-6 py-4 border-b border-white/10 bg-black/40 backdrop-blur-xl">
         <div className="flex items-center gap-4">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -884,7 +869,7 @@ export default function JarvisUI() {
           </div>
 
           {/* Theme Switcher */}
-          <div className="relative">
+          <div className="relative" ref={themePanelRef}>
             <button
               onClick={() => setThemePanelOpen(p => !p)}
               className="flex items-center gap-2 px-3 py-1.5 bg-black/40 rounded-lg border border-white/10 hover:border-purple-500/30 transition-all text-xs text-white/70 hover:text-purple-400"
@@ -961,17 +946,17 @@ export default function JarvisUI() {
           )}
         </AnimatePresence>
         
-        <main className="flex-1 p-6 overflow-auto">
+        <main className="flex-1 overflow-auto" style={{ padding: activeView === "terminal" ? 0 : "1.5rem" }}>
           {activeView === "dashboard" && renderDashboard()}
-          {activeView === "chat" && renderDashboard()}
           {activeView === "settings" && renderSettings()}
+
           {activeView === "initialize" && (
             <div className="max-w-2xl mx-auto space-y-6 py-8">
               <div className="text-center mb-8">
                 <h2 className="text-2xl font-black tracking-[0.25em] text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400 mb-2">
-                  SYSTEM INITIALIZATION
+                  SYSTEM BOOT SEQUENCE
                 </h2>
-                <p className="text-xs font-mono text-white/40 tracking-widest">GOD PROTOCOL v5.0 — ONE-CLICK AUTO-CONNECT ENGINE</p>
+                <p className="text-xs font-mono text-white/40 tracking-widest">GOD PROTOCOL v5.0 — ONE-CLICK INITIALIZE</p>
               </div>
               <Card glow="purple" size="xl" padding="lg">
                 <InitializeSystem
@@ -981,77 +966,62 @@ export default function JarvisUI() {
               </Card>
             </div>
           )}
-          {activeView === "xterminal" && (
-            <div className="h-full flex flex-col gap-4">
-              <div className="flex items-center justify-between flex-shrink-0">
-                <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Terminal className="w-5 h-5 text-purple-400" />
-                  Live Terminal Bridge
-                </h2>
-                <span className="text-xs font-mono text-white/40">node-pty WebSocket bridge — bash / WSL2 / PowerShell</span>
-              </div>
-              <div className="flex-1 grid grid-rows-2 gap-4 min-h-0">
-                <XTerminal shell="bash" title="BASH — Primary Shell" height={undefined} className="h-full" />
-                <XTerminal shell="wsl" title="WSL2 — Ubuntu Bridge" height={undefined} className="h-full" />
-              </div>
+
+          {activeView === "chat" && (
+            <div className="h-full flex flex-col" style={{ height: "calc(100vh - 73px - 3rem)" }}>
+              <OllamaChat />
             </div>
           )}
-          {activeView === "audio" && (
-            <div className="max-w-3xl mx-auto space-y-6 py-8">
-              <div className="text-center mb-6">
-                <h2 className="text-2xl font-black tracking-[0.25em] text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 mb-2">
-                  AUDIO FFT SYNC NODE
-                </h2>
-                <p className="text-xs font-mono text-white/40 tracking-widest">Web Audio API — Real-time Frequency Analysis</p>
-              </div>
-              <Card glow="cyan" size="xl" padding="lg">
-                <AudioSync
-                  onAmplitudeChange={(amp) => setAudioAmplitude(amp)}
-                  className="w-full"
-                />
-              </Card>
-              <Card glow="purple" size="md" padding="md">
-                <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-purple-400" />
-                  FFT Technical Details
+
+          {activeView === "terminal" && (
+            <div className="h-full flex flex-col" style={{ height: "calc(100vh - 73px)" }}>
+              <TerminalEmulator />
+            </div>
+          )}
+
+          {activeView === "voice" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card glow="purple" size="xl" padding="lg">
+                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                  <Mic className="w-5 h-5 text-purple-400" /> Voice Interface
                 </h3>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  {[
-                    { label: "FFT Size", val: "256 bins" },
-                    { label: "Sample Rate", val: "44.1 kHz" },
-                    { label: "Smoothing", val: "0.8 τ" },
-                    { label: "Freq Range", val: "20 Hz–22 kHz" },
-                    { label: "Bit Depth", val: "32-bit float" },
-                    { label: "Latency", val: "~5 ms" },
-                  ].map(({ label, val }) => (
-                    <div key={label} className="bg-black/30 rounded-lg p-3">
-                      <div className="text-[10px] text-white/40 font-mono mb-1">{label}</div>
-                      <div className="text-sm font-bold text-cyan-400 font-mono">{val}</div>
-                    </div>
-                  ))}
-                </div>
+                <VoiceInterface />
               </Card>
+              <div className="space-y-6">
+                <Card glow="cyan" size="xl" padding="lg">
+                  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <Radio className="w-5 h-5 text-cyan-400" /> Audio FFT Sync
+                  </h3>
+                  <AudioSync onAmplitudeChange={(amp) => setAudioAmplitude(amp)} className="w-full" />
+                </Card>
+                <Card glow="purple" size="md" padding="md">
+                  <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-purple-400" /> FFT Stats
+                  </h3>
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    {[
+                      { label: "FFT Size", val: "256 bins" },
+                      { label: "Sample Rate", val: "44.1 kHz" },
+                      { label: "Latency", val: "~5 ms" },
+                    ].map(({ label, val }) => (
+                      <div key={label} className="bg-black/30 rounded-lg p-3">
+                        <div className="text-[10px] text-white/40 font-mono mb-1">{label}</div>
+                        <div className="text-sm font-bold text-cyan-400 font-mono">{val}</div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </div>
             </div>
           )}
+
           {activeView === "trading" && <TradingDashboard />}
           {activeView === "swarm" && <SwarmNetwork />}
           {activeView === "blockchain" && <BlockchainIdentityPanel />}
-          {activeView === "logs" && <LogViewer />}
-          {activeView === "tasks" && <TaskManager />}
           {activeView === "security" && <SecurityDashboard />}
-          {activeView === "memory" && <MemoryPalace />}
-          {activeView === "council" && <CouncilOfThree />}
-          {activeView === "voice" && <VoiceInterface />}
-          {activeView === "terminal" && <TerminalEmulator />}
           {activeView === "files" && <FileManager />}
-          {activeView === "network" && <NetworkMonitor />}
-          {activeView === "quantum" && <QuantumInterface />}
           {activeView === "iot" && <IoTDeviceControl />}
-          {activeView === "biometric" && <BiometricAuth />}
           {activeView === "knowledge" && <KnowledgeGraph />}
-          {activeView === "circadian" && <CircadianSync />}
-          {activeView === "panic" && <PanicRoom />}
-          {activeView === "deadman" && <DeadMansSwitch />}
         </main>
       </div>
       
