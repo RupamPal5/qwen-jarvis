@@ -1648,16 +1648,6 @@ const COMMANDS: Record<string, CommandDefinition> = {
     category: "system",
     execute: async () => "0m0.015s 0m0.008s\n0m0.000s 0m0.000s",
   },
-  "kill": {
-    name: "kill",
-    description: "Send a signal to a job",
-    usage: "kill [-s sigspec | -n signum | -sigspec] [pid | jobspec] ...",
-    category: "system",
-    execute: async (args) => {
-      if (args.length === 0) return "kill: usage: kill [-s sigspec | -n signum | -sigspec] pid | jobspec ...";
-      return `signal sent to ${args[0]}`;
-    },
-  },
   "builtin": {
     name: "builtin",
     description: "Run shell builtins",
@@ -1684,16 +1674,6 @@ const COMMANDS: Record<string, CommandDefinition> = {
     usage: "enable [-a] [-dnps] [-f filename] [name ...]",
     category: "system",
     execute: async () => "builtins enabled.",
-  },
-  "help": {
-    name: "help",
-    description: "Display information about builtin commands",
-    usage: "help [-dms] [pattern ...]",
-    category: "system",
-    execute: async (args) => {
-      if (args.length === 0) return "help: usage: help [-dms] [pattern ...]";
-      return `help for ${args[0]} displayed.`;
-    },
   },
   "let": {
     name: "let",
@@ -1755,13 +1735,6 @@ const COMMANDS: Record<string, CommandDefinition> = {
       if (args.length === 0) return "pushd: usage: pushd [-n] [+N | -N | dir]";
       return `directory stack: /home/architect ${args[0]}`;
     },
-  },
-  "shopt": {
-    name: "shopt",
-    description: "Set and unset shell options",
-    usage: "shopt [-pqsu] [-o] [optname ...]",
-    category: "system",
-    execute: async () => "shell options configured.",
   },
   "bind": {
     name: "bind",
@@ -1900,13 +1873,6 @@ const COMMANDS: Record<string, CommandDefinition> = {
         return "expr: syntax error";
       }
     },
-  },
-  "test": {
-    name: "test",
-    description: "Evaluate conditional expression",
-    usage: "test expression",
-    category: "system",
-    execute: async () => "expression evaluated.",
   },
 };
 

@@ -1,5 +1,5 @@
 // JARVIS V5.0 GOD PROTOCOL - ULTIMATE EDITION
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Brain, Shield, Activity, MessageSquare, Terminal,
@@ -149,6 +149,10 @@ import {
   Wheat,
 } from "lucide-react";
 import { useStore, type Message } from "../store";
+import { THEMES, applyTheme, type ThemeId } from "../theme";
+import InitializeSystem from "../components/InitializeSystem";
+import XTerminal from "../components/XTerminal";
+import AudioSync from "../components/AudioSync";
 import AdvancedSettings from "../components/AdvancedSettings";
 import Scene3D from "../components/Scene3D";
 import VoiceWaveform from "../components/VoiceWaveform";
@@ -474,13 +478,19 @@ const Badge: React.FC<{
 export default function JarvisUI() {
   const [activeView, setActiveView] = useState<string>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [themePanelOpen, setThemePanelOpen] = useState(false);
   
   const metrics = useSystemMetrics();
   const notificationSystem = useNotifications();
-  const { messages, addMessage } = useStore();
+  const { messages, addMessage, theme, setTheme, systemStatus, setSystemStatus, setAudioAmplitude } = useStore();
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+
+  // Apply theme on mount and when it changes
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
   
   useEffect(() => {
     // Attempt WebSocket connection — gracefully handle failure
@@ -794,28 +804,31 @@ export default function JarvisUI() {
   );
 
   const navItems = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "chat", label: "Neural Chat", icon: MessageSquare },
-    { id: "trading", label: "Trading", icon: BarChart3 },
-    { id: "swarm", label: "Swarm Network", icon: Network },
-    { id: "blockchain", label: "Blockchain", icon: Shield },
-    { id: "settings", label: "Settings", icon: Settings },
-    { id: "logs", label: "Log Viewer", icon: FileText },
-    { id: "tasks", label: "Tasks", icon: Kanban },
-    { id: "security", label: "Security", icon: ShieldAlert },
-    { id: "memory", label: "Memory Palace", icon: Brain },
-    { id: "council", label: "Council Debate", icon: Scale },
-    { id: "voice", label: "Voice Interface", icon: Mic },
-    { id: "terminal", label: "Terminal", icon: Terminal },
-    { id: "files", label: "File Manager", icon: Folder },
-    { id: "network", label: "Network Monitor", icon: Network },
-    { id: "quantum", label: "Quantum Core", icon: Atom },
-    { id: "iot", label: "IoT Devices", icon: Smartphone },
-    { id: "biometric", label: "Biometric Auth", icon: Fingerprint },
-    { id: "knowledge", label: "Knowledge Graph", icon: Network },
-    { id: "circadian", label: "Circadian Sync", icon: Sun },
-    { id: "panic", label: "Panic Room", icon: AlertOctagon },
-    { id: "deadman", label: "Dead Man's Switch", icon: Skull },
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, group: "core" },
+    { id: "initialize", label: "Initialize System", icon: Power, group: "core" },
+    { id: "xterminal", label: "Live Terminal", icon: Terminal, group: "core" },
+    { id: "audio", label: "Audio FFT Sync", icon: Radio, group: "core" },
+    { id: "chat", label: "Neural Chat", icon: MessageSquare, group: "ai" },
+    { id: "council", label: "Council Debate", icon: Scale, group: "ai" },
+    { id: "voice", label: "Voice Interface", icon: Mic, group: "ai" },
+    { id: "trading", label: "Trading", icon: BarChart3, group: "data" },
+    { id: "swarm", label: "Swarm Network", icon: Network, group: "data" },
+    { id: "blockchain", label: "Blockchain", icon: Shield, group: "data" },
+    { id: "knowledge", label: "Knowledge Graph", icon: Network, group: "data" },
+    { id: "logs", label: "Log Viewer", icon: FileText, group: "sys" },
+    { id: "tasks", label: "Tasks", icon: Kanban, group: "sys" },
+    { id: "security", label: "Security", icon: ShieldAlert, group: "sys" },
+    { id: "memory", label: "Memory Palace", icon: Brain, group: "sys" },
+    { id: "terminal", label: "Terminal Emulator", icon: SquareCode, group: "sys" },
+    { id: "files", label: "File Manager", icon: Folder, group: "sys" },
+    { id: "network", label: "Network Monitor", icon: Network, group: "sys" },
+    { id: "quantum", label: "Quantum Core", icon: Atom, group: "sys" },
+    { id: "iot", label: "IoT Devices", icon: Smartphone, group: "sys" },
+    { id: "biometric", label: "Biometric Auth", icon: Fingerprint, group: "sys" },
+    { id: "circadian", label: "Circadian Sync", icon: Sun, group: "sys" },
+    { id: "panic", label: "Panic Room", icon: AlertOctagon, group: "sys" },
+    { id: "deadman", label: "Dead Man's Switch", icon: Skull, group: "sys" },
+    { id: "settings", label: "Settings", icon: Settings, group: "sys" },
   ];
 
   return (
@@ -844,13 +857,72 @@ export default function JarvisUI() {
               <p className="text-[10px] text-white/40 tracking-[0.2em]">V5.0 GOD PROTOCOL</p>
             </div>
           </div>
+          {/* System Status Badge */}
+          <motion.div
+            className={`hidden sm:flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-mono font-bold tracking-widest cursor-pointer transition-all ${
+              systemStatus === "ONLINE"
+                ? "border-emerald-500/50 text-emerald-400 bg-emerald-950/40"
+                : systemStatus === "BOOTING"
+                ? "border-yellow-500/50 text-yellow-400 bg-yellow-950/40"
+                : "border-white/15 text-white/30 bg-black/30 hover:border-purple-500/40 hover:text-purple-400"
+            }`}
+            onClick={() => setActiveView("initialize")}
+            animate={systemStatus === "ONLINE" ? { boxShadow: ["0 0 0px rgba(52,211,153,0)", "0 0 12px rgba(52,211,153,0.4)", "0 0 0px rgba(52,211,153,0)"] } : {}}
+            transition={{ repeat: Infinity, duration: 3 }}
+          >
+            <div className={`w-1.5 h-1.5 rounded-full ${
+              systemStatus === "ONLINE" ? "bg-emerald-400" : systemStatus === "BOOTING" ? "bg-yellow-400 animate-pulse" : "bg-white/20"
+            }`} />
+            {systemStatus === "OFFLINE" ? "SYSTEM OFFLINE" : systemStatus === "BOOTING" ? "BOOTING..." : "GOD PROTOCOL ONLINE"}
+          </motion.div>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-3 py-1.5 bg-black/40 rounded-lg border border-white/10">
             <Cpu className="w-4 h-4 text-cyan-400" />
             <span className="text-xs text-white/70">{metrics.cpuUsage.toFixed(0)}%</span>
           </div>
+
+          {/* Theme Switcher */}
+          <div className="relative">
+            <button
+              onClick={() => setThemePanelOpen(p => !p)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-black/40 rounded-lg border border-white/10 hover:border-purple-500/30 transition-all text-xs text-white/70 hover:text-purple-400"
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              <span className="hidden md:inline font-mono text-[10px] tracking-wider">{THEMES[theme].name.toUpperCase()}</span>
+            </button>
+            <AnimatePresence>
+              {themePanelOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                  className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-white/15 bg-black/90 backdrop-blur-xl shadow-2xl z-50 overflow-hidden"
+                >
+                  <div className="px-3 py-2 border-b border-white/10">
+                    <span className="text-[9px] font-mono text-white/40 tracking-widest">THEME MATRIX</span>
+                  </div>
+                  {(Object.values(THEMES) as typeof THEMES[keyof typeof THEMES][]).map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => { setTheme(t.id as ThemeId); setThemePanelOpen(false); }}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 text-xs transition-all hover:bg-white/5 ${
+                        theme === t.id ? "text-purple-300 bg-purple-950/40" : "text-white/60"
+                      }`}
+                    >
+                      <div>
+                        <div className="font-mono font-semibold">{t.name}</div>
+                        <div className="text-[9px] text-white/30 mt-0.5">{t.description}</div>
+                      </div>
+                      {theme === t.id && <CheckCircle className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
           <button className="relative p-2 hover:bg-white/5 rounded-lg transition-colors">
             <Bell className="w-5 h-5" />
             {notificationSystem.notifications.length > 0 && (
@@ -893,6 +965,74 @@ export default function JarvisUI() {
           {activeView === "dashboard" && renderDashboard()}
           {activeView === "chat" && renderDashboard()}
           {activeView === "settings" && renderSettings()}
+          {activeView === "initialize" && (
+            <div className="max-w-2xl mx-auto space-y-6 py-8">
+              <div className="text-center mb-8">
+                <h2 className="text-2xl font-black tracking-[0.25em] text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400 mb-2">
+                  SYSTEM INITIALIZATION
+                </h2>
+                <p className="text-xs font-mono text-white/40 tracking-widest">GOD PROTOCOL v5.0 — ONE-CLICK AUTO-CONNECT ENGINE</p>
+              </div>
+              <Card glow="purple" size="xl" padding="lg">
+                <InitializeSystem
+                  onInitialized={() => setSystemStatus("ONLINE")}
+                  onBootLog={() => { if (systemStatus === "OFFLINE") setSystemStatus("BOOTING"); }}
+                />
+              </Card>
+            </div>
+          )}
+          {activeView === "xterminal" && (
+            <div className="h-full flex flex-col gap-4">
+              <div className="flex items-center justify-between flex-shrink-0">
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Terminal className="w-5 h-5 text-purple-400" />
+                  Live Terminal Bridge
+                </h2>
+                <span className="text-xs font-mono text-white/40">node-pty WebSocket bridge — bash / WSL2 / PowerShell</span>
+              </div>
+              <div className="flex-1 grid grid-rows-2 gap-4 min-h-0">
+                <XTerminal shell="bash" title="BASH — Primary Shell" height={undefined} className="h-full" />
+                <XTerminal shell="wsl" title="WSL2 — Ubuntu Bridge" height={undefined} className="h-full" />
+              </div>
+            </div>
+          )}
+          {activeView === "audio" && (
+            <div className="max-w-3xl mx-auto space-y-6 py-8">
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-black tracking-[0.25em] text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 mb-2">
+                  AUDIO FFT SYNC NODE
+                </h2>
+                <p className="text-xs font-mono text-white/40 tracking-widest">Web Audio API — Real-time Frequency Analysis</p>
+              </div>
+              <Card glow="cyan" size="xl" padding="lg">
+                <AudioSync
+                  onAmplitudeChange={(amp) => setAudioAmplitude(amp)}
+                  className="w-full"
+                />
+              </Card>
+              <Card glow="purple" size="md" padding="md">
+                <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-purple-400" />
+                  FFT Technical Details
+                </h3>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  {[
+                    { label: "FFT Size", val: "256 bins" },
+                    { label: "Sample Rate", val: "44.1 kHz" },
+                    { label: "Smoothing", val: "0.8 τ" },
+                    { label: "Freq Range", val: "20 Hz–22 kHz" },
+                    { label: "Bit Depth", val: "32-bit float" },
+                    { label: "Latency", val: "~5 ms" },
+                  ].map(({ label, val }) => (
+                    <div key={label} className="bg-black/30 rounded-lg p-3">
+                      <div className="text-[10px] text-white/40 font-mono mb-1">{label}</div>
+                      <div className="text-sm font-bold text-cyan-400 font-mono">{val}</div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+          )}
           {activeView === "trading" && <TradingDashboard />}
           {activeView === "swarm" && <SwarmNetwork />}
           {activeView === "blockchain" && <BlockchainIdentityPanel />}

@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { ThemeId } from './theme';
 
 export type InputMode = 'text' | 'voice' | 'code' | 'vision';
 export type ThreatLevel = 'LOW' | 'ELEVATED' | 'CRITICAL';
 export type TradingStatus = 'IDLE' | 'ANALYZING' | 'EXECUTING' | 'PROFIT' | 'LOSS';
 export type SwarmNodeStatus = 'ONLINE' | 'SYNCING' | 'PROCESSING' | 'OFFLINE';
+export type SystemStatus = 'OFFLINE' | 'BOOTING' | 'ONLINE';
 
 export interface Message {
   id: string;
@@ -55,7 +57,14 @@ interface JarvisState {
   threatLevel: ThreatLevel;
   showThreatPopup: boolean;
   activePanel: 'chat' | 'trading' | 'swarm' | 'blockchain' | 'quantum';
-  
+
+  // Theme
+  theme: ThemeId;
+
+  // System Status
+  systemStatus: SystemStatus;
+  audioAmplitude: number;
+
   // Data
   cpuLoad: number;
   energyLevel: number;
@@ -66,7 +75,7 @@ interface JarvisState {
   swarmNodes: SwarmNode[];
   blockchainIdentity: BlockchainIdentity;
   quantumEntanglement: number;
-  
+
   // Actions
   toggleRadialMenu: () => void;
   toggleVoice: () => void;
@@ -83,6 +92,9 @@ interface JarvisState {
   updateBlockchainIdentity: (identity: BlockchainIdentity) => void;
   updateQuantumEntanglement: (value: number) => void;
   clearMessages: () => void;
+  setTheme: (theme: ThemeId) => void;
+  setSystemStatus: (status: SystemStatus) => void;
+  setAudioAmplitude: (amp: number) => void;
 }
 
 export const useStore = create<JarvisState>()(
@@ -95,7 +107,11 @@ export const useStore = create<JarvisState>()(
       threatLevel: 'LOW',
       showThreatPopup: false,
       activePanel: 'chat',
-      
+
+      theme: 'cyberpunk',
+      systemStatus: 'OFFLINE',
+      audioAmplitude: 0,
+
       cpuLoad: 42,
       energyLevel: 85,
       activeWindow: 'VS Code',
@@ -110,7 +126,7 @@ export const useStore = create<JarvisState>()(
         transactions: 1247
       },
       quantumEntanglement: 94.2,
-      
+
       toggleRadialMenu: () => set((state) => ({ isRadialMenuOpen: !state.isRadialMenuOpen })),
       toggleVoice: () => set((state) => ({ isVoiceActive: !state.isVoiceActive, isListening: !state.isVoiceActive })),
       setListening: (status) => set({ isListening: status }),
@@ -126,6 +142,9 @@ export const useStore = create<JarvisState>()(
       updateBlockchainIdentity: (identity) => set({ blockchainIdentity: identity }),
       updateQuantumEntanglement: (value) => set({ quantumEntanglement: value }),
       clearMessages: () => set({ messages: [] }),
+      setTheme: (theme) => set({ theme }),
+      setSystemStatus: (status) => set({ systemStatus: status }),
+      setAudioAmplitude: (amp) => set({ audioAmplitude: amp }),
     }),
     {
       name: 'jarvis-god-protocol-storage',
@@ -133,6 +152,7 @@ export const useStore = create<JarvisState>()(
         messages: state.messages,
         blockchainIdentity: state.blockchainIdentity,
         energyLevel: state.energyLevel,
+        theme: state.theme,
       }),
     }
   )
