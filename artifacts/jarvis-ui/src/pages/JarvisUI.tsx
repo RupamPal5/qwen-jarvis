@@ -154,6 +154,7 @@ import InitializeSystem from "../components/InitializeSystem";
 import XTerminal from "../components/XTerminal";
 import AudioSync from "../components/AudioSync";
 import OllamaChat from "../components/OllamaChat";
+import VoiceAudioPage from "../components/VoiceAudioPage";
 import AdvancedSettings from "../components/AdvancedSettings";
 import Scene3D from "../components/Scene3D";
 import VoiceWaveform from "../components/VoiceWaveform";
@@ -767,11 +768,13 @@ export default function JarvisUI() {
                 />
                 <Button variant="secondary" onClick={saveOllamaUrl}>Save</Button>
               </div>
-              <p className="text-xs text-white/30 mt-2 font-mono">
-                1. Run <code className="bg-black/40 px-1 rounded">OLLAMA_HOST=0.0.0.0 ollama serve</code> on your laptop<br/>
-                2. Find your LAN IP: <code className="bg-black/40 px-1 rounded">ipconfig</code> (Windows) or <code className="bg-black/40 px-1 rounded">ip a</code> (Linux/WSL)<br/>
-                3. Enter it above as <code className="bg-black/40 px-1 rounded">http://192.168.x.x:11434</code>
-              </p>
+              <div className="mt-3 space-y-2 text-[11px] font-mono">
+                <p className="text-white/50 mb-1">PowerShell (Windows):</p>
+                <code className="block bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-green-400 select-all">$env:OLLAMA_HOST="0.0.0.0"; ollama serve</code>
+                <p className="text-white/50 mb-1 mt-2">Then find your LAN IP:</p>
+                <code className="block bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-cyan-400 select-all">ipconfig</code>
+                <p className="text-white/30 mt-1">Look for <span className="text-white/50">IPv4 Address</span> under your Wi-Fi adapter. Enter it above as <span className="text-cyan-400">http://192.168.x.x:11434</span></p>
+              </div>
             </div>
           </div>
         </Card>
@@ -817,10 +820,10 @@ export default function JarvisUI() {
   ];
 
   return (
-    <div className="min-h-screen bg-black text-white font-mono overflow-hidden relative">
+    <div className="jarvis-root min-h-screen font-mono overflow-hidden relative">
       <Scene3D />
       
-      <header className="relative z-50 flex items-center justify-between px-6 py-4 border-b border-white/10 bg-black/40 backdrop-blur-xl">
+      <header className="jarvis-header relative z-50 flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-4">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -922,19 +925,19 @@ export default function JarvisUI() {
           {sidebarOpen && (
             <motion.aside
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 280, opacity: 1 }}
+              animate={{ width: 260, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
-              className="border-r border-white/10 bg-black/40 backdrop-blur-xl overflow-hidden overflow-y-auto flex-shrink-0"
+              className="jarvis-sidebar overflow-hidden overflow-y-auto flex-shrink-0"
             >
-              <nav className="p-4 space-y-1">
+              <nav className="p-3 space-y-0.5">
                 {navItems.map((item) => (
                   <button
                     key={item.id}
                     onClick={() => setActiveView(item.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all ${
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
                       activeView === item.id
-                        ? "bg-purple-600/20 border border-purple-500/30 text-purple-400"
-                        : "text-white/60 hover:bg-white/5 hover:text-white"
+                        ? "nav-active"
+                        : "text-white/50 hover:bg-white/5 hover:text-white/90"
                     }`}
                   >
                     <item.icon className="w-4 h-4 flex-shrink-0" />
@@ -980,39 +983,7 @@ export default function JarvisUI() {
           )}
 
           {activeView === "voice" && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card glow="purple" size="xl" padding="lg">
-                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <Mic className="w-5 h-5 text-purple-400" /> Voice Interface
-                </h3>
-                <VoiceInterface />
-              </Card>
-              <div className="space-y-6">
-                <Card glow="cyan" size="xl" padding="lg">
-                  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <Radio className="w-5 h-5 text-cyan-400" /> Audio FFT Sync
-                  </h3>
-                  <AudioSync onAmplitudeChange={(amp) => setAudioAmplitude(amp)} className="w-full" />
-                </Card>
-                <Card glow="purple" size="md" padding="md">
-                  <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-purple-400" /> FFT Stats
-                  </h3>
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    {[
-                      { label: "FFT Size", val: "256 bins" },
-                      { label: "Sample Rate", val: "44.1 kHz" },
-                      { label: "Latency", val: "~5 ms" },
-                    ].map(({ label, val }) => (
-                      <div key={label} className="bg-black/30 rounded-lg p-3">
-                        <div className="text-[10px] text-white/40 font-mono mb-1">{label}</div>
-                        <div className="text-sm font-bold text-cyan-400 font-mono">{val}</div>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              </div>
-            </div>
+            <VoiceAudioPage onAmplitudeChange={(amp) => setAudioAmplitude(amp)} />
           )}
 
           {activeView === "trading" && <TradingDashboard />}
