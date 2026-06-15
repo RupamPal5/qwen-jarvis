@@ -1,0 +1,50 @@
+
+# Please enter the commit message for your changes. Lines starting
+# with '#' will be ignored, and an empty message aborts the commit.
+#
+# On branch main
+# Your branch is up to date with 'origin/main'.
+#
+# Changes to be committed:
+#	new file:   src/app/globals.css
+#	new file:   src/app/layout.jsx
+#	new file:   src/app/page.jsx
+#	new file:   src/components/FloatingToggle.jsx
+#	new file:   src/components/ThemeContext.jsx
+#
+# Changes not staged for commit:
+#	deleted:    jarvis-ui/app/BiometricAuth.tsx
+#	modified:   jarvis-ui/app/globals.css
+#	modified:   jarvis-ui/app/layout.tsx
+#	modified:   jarvis-ui/app/page.tsx
+#	deleted:    jarvis-ui/components/circular-gauge.tsx
+#	deleted:    jarvis-ui/components/command-interface.tsx
+#	deleted:    jarvis-ui/components/dashboard.tsx
+#	deleted:    jarvis-ui/components/glassmorphic-panel.tsx
+#	deleted:    jarvis-ui/components/holographic-header.tsx
+#	deleted:    jarvis-ui/components/logs-panel.tsx
+#	deleted:    jarvis-ui/components/particle-background.tsx
+#	deleted:    jarvis-ui/components/status-bar.tsx
+#	deleted:    jarvis-ui/components/telemetry-dashboard.tsx
+#	deleted:    jarvis-ui/components/voice-visualizer.tsx
+#	deleted:    src/app/globals.css
+#	deleted:    src/app/layout.jsx
+#	deleted:    src/app/page.jsx
+#	deleted:    src/components/FloatingToggle.jsx
+#	deleted:    src/components/ThemeContext.jsx
+#
+# Untracked files:
+#	jarvis-ui/app/components/BiometricAuth.tsx
+#	jarvis-ui/app/components/FloatingToggle.jsx
+#	jarvis-ui/app/components/ThemeContext.jsx
+#	jarvis-ui/app/components/circular-gauge.tsx
+#	jarvis-ui/app/components/command-interface.tsx
+#	jarvis-ui/app/components/dashboard.tsx
+#	jarvis-ui/app/components/glassmorphic-panel.tsx
+#	jarvis-ui/app/components/holographic-header.tsx
+#	jarvis-ui/app/components/logs-panel.tsx
+#	jarvis-ui/app/components/particle-background.tsx
+#	jarvis-ui/app/components/status-bar.tsx
+#	jarvis-ui/app/components/telemetry-dashboard.tsx
+#	jarvis-ui/app/components/voice-visualizer.tsx
+#
