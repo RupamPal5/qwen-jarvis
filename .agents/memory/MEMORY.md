@@ -1,0 +1,2 @@
+- [JARVIS UI Theme System](jarvis-theme-system.md) — 5 themes set CSS vars via applyTheme(); all components must consume vars not hardcoded colors
+- [Purple Tint Fix](jarvis-purple-tint.md) — non-cyberpunk purple suppression via body:not(.theme-cyberpunk) CSS overrides in index.css

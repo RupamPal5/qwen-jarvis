@@ -311,122 +311,182 @@
   }
 }
 
-/* ── JARVIS THEME SYSTEM ────────────────────────────────────── */
-/* All themes set CSS vars via applyTheme(). These rules consume them. */
+/* ═══════════════════════════════════════════════════════════════
+   JARVIS THEME SYSTEM
+   All themes call applyTheme() which sets CSS vars on :root.
+   These rules consume those vars — zero hardcoded colors here.
+   ═══════════════════════════════════════════════════════════════ */
 
+/* ── Root app wrapper ─────────────────────────────────────────── */
 .jarvis-root {
-  background: var(--bg-base);
-  color: var(--text-primary);
+  background: var(--bg-base, #040607);
+  color: var(--text-primary, #f0f0ff);
   min-height: 100vh;
-  transition: background 0.4s ease;
+  transition: background 0.45s ease, color 0.3s ease;
 }
 
-/* Glass panels */
-.glass-panel {
-  background: var(--bg-glass, rgba(100,20,200,0.12));
-  border: 1px solid var(--bg-glass-border, rgba(180,50,255,0.35));
-  backdrop-filter: blur(20px) saturate(1.5);
-  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+/* ── Premium Glassmorphism card ───────────────────────────────── */
+.glass-card {
+  /* layered background: glass tint + subtle noise */
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--bg-glass, rgba(80,60,140,0.18)) 100%, transparent),
+      color-mix(in srgb, var(--bg-base, #040607) 60%, transparent 40%)
+    );
+  border: 1px solid var(--bg-glass-border, rgba(120,80,255,0.30));
+  /* deep blur + slight saturation boost */
+  backdrop-filter: blur(28px) saturate(1.6) brightness(1.05);
+  -webkit-backdrop-filter: blur(28px) saturate(1.6) brightness(1.05);
   border-radius: var(--border-radius, 0.75rem);
-  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  /* inner highlight top edge (frosted glass catch) */
+  box-shadow:
+    0 4px 40px rgba(0,0,0,0.50),
+    inset 0 1px 0 rgba(255,255,255,0.09),
+    inset 0 -1px 0 rgba(0,0,0,0.12);
+  transition:
+    background 0.35s ease,
+    border-color 0.35s ease,
+    box-shadow 0.35s ease;
 }
 
-.glass-panel:hover {
-  box-shadow: var(--glow-primary, none);
+.glass-card:hover {
+  box-shadow:
+    var(--glow-primary, none),
+    0 4px 40px rgba(0,0,0,0.50),
+    inset 0 1px 0 rgba(255,255,255,0.11);
 }
 
-/* Sidebar glass */
-.jarvis-sidebar {
-  background: color-mix(in srgb, var(--bg-base) 70%, transparent 30%);
-  backdrop-filter: blur(24px) saturate(1.8);
-  -webkit-backdrop-filter: blur(24px) saturate(1.8);
-  border-right: 1px solid var(--bg-glass-border, rgba(180,50,255,0.2));
+/* ── Lighter variant (panels inside cards) ────────────────────── */
+.glass-panel {
+  background: color-mix(in srgb, var(--bg-glass) 80%, transparent);
+  border: 1px solid var(--bg-glass-border);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border-radius: var(--border-radius, 0.75rem);
   transition: background 0.3s ease, border-color 0.3s ease;
 }
 
-/* Active nav item — uses accent */
+/* ── Sidebar ──────────────────────────────────────────────────── */
+.jarvis-sidebar {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-base) 85%, transparent 15%),
+      color-mix(in srgb, var(--bg-base) 78%, transparent 22%)
+    );
+  backdrop-filter: blur(32px) saturate(1.7);
+  -webkit-backdrop-filter: blur(32px) saturate(1.7);
+  border-right: 1px solid var(--bg-glass-border);
+  transition: background 0.35s ease, border-color 0.35s ease;
+}
+
+/* ── Active nav item ──────────────────────────────────────────── */
 .nav-active {
-  background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent-primary) 45%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 42%, transparent) !important;
   color: var(--accent-primary) !important;
-  box-shadow: inset 0 0 12px color-mix(in srgb, var(--accent-primary) 10%, transparent);
+  box-shadow:
+    inset 0 0 14px color-mix(in srgb, var(--accent-primary) 8%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--accent-primary) 10%, transparent);
   transition: all 0.2s ease;
 }
 
 .nav-active svg {
   color: var(--accent-primary) !important;
-  filter: drop-shadow(0 0 4px var(--accent-primary));
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent-primary) 70%, transparent));
 }
 
-/* Header glass */
+/* ── Header ───────────────────────────────────────────────────── */
 .jarvis-header {
-  background: color-mix(in srgb, var(--bg-base) 60%, transparent 40%);
-  backdrop-filter: blur(20px) saturate(1.6);
-  -webkit-backdrop-filter: blur(20px) saturate(1.6);
-  border-bottom: 1px solid var(--bg-glass-border, rgba(180,50,255,0.2));
-  transition: background 0.3s ease, border-color 0.3s ease;
+  background: color-mix(in srgb, var(--bg-base) 55%, transparent 45%);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  border-bottom: 1px solid var(--bg-glass-border);
+  transition: background 0.35s ease, border-color 0.35s ease;
 }
 
-/* Accent glow text */
-.text-accent {
-  color: var(--accent-primary);
-}
+/* ── Accent helpers ───────────────────────────────────────────── */
+.text-accent   { color: var(--accent-primary); }
+.text-accent-2 { color: var(--accent-secondary); }
 
-.text-accent-2 {
-  color: var(--accent-secondary);
-}
-
-/* Neon glowing border */
 .glow-border {
   border-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
-  box-shadow: 0 0 15px color-mix(in srgb, var(--accent-primary) 30%, transparent),
-              inset 0 0 15px color-mix(in srgb, var(--accent-primary) 5%, transparent);
+  box-shadow:
+    0 0 16px color-mix(in srgb, var(--accent-primary) 32%, transparent),
+    inset 0 0 16px color-mix(in srgb, var(--accent-primary) 6%, transparent);
 }
 
-/* Pulse dot with theme accent */
 .accent-dot {
   background: var(--accent-primary);
   box-shadow: 0 0 8px var(--accent-primary);
 }
 
-/* Morning sky — light mode overrides */
-.theme-morning .jarvis-root {
-  --text-high: #0f172a;
+/* ── PURPLE-TINT SUPPRESSION for non-Cyberpunk themes ─────────── */
+/* Hardcoded Tailwind purple classes throughout components will be
+   overridden to use the current theme accent instead. */
+
+body:not(.theme-cyberpunk) .border-purple-500\/30,
+body:not(.theme-cyberpunk) .border-purple-500\/20,
+body:not(.theme-cyberpunk) .border-purple-400\/50 {
+  border-color: color-mix(in srgb, var(--accent-primary) 35%, transparent) !important;
 }
 
-/* Terminal boot text animation */
+body:not(.theme-cyberpunk) .bg-purple-600\/20,
+body:not(.theme-cyberpunk) .bg-purple-900\/40,
+body:not(.theme-cyberpunk) .bg-purple-950\/40,
+body:not(.theme-cyberpunk) .bg-purple-950\/30,
+body:not(.theme-cyberpunk) .bg-purple-950\/60 {
+  background-color: color-mix(in srgb, var(--accent-primary) 14%, transparent) !important;
+}
+
+body:not(.theme-cyberpunk) .text-purple-400,
+body:not(.theme-cyberpunk) .text-purple-300,
+body:not(.theme-cyberpunk) .text-purple-200 {
+  color: var(--accent-primary) !important;
+}
+
+body:not(.theme-cyberpunk) .focus\:border-purple-500\/50:focus {
+  border-color: color-mix(in srgb, var(--accent-primary) 50%, transparent) !important;
+}
+
+body:not(.theme-cyberpunk) .hover\:border-purple-500\/30:hover,
+body:not(.theme-cyberpunk) .hover\:border-purple-400\/50:hover {
+  border-color: color-mix(in srgb, var(--accent-primary) 35%, transparent) !important;
+}
+
+body:not(.theme-cyberpunk) .hover\:text-purple-400:hover {
+  color: var(--accent-primary) !important;
+}
+
+body:not(.theme-cyberpunk) [class*="shadow"][class*="168,85,247"] {
+  box-shadow: var(--glow-primary) !important;
+}
+
+/* Gradient buttons: replace purple→accent on non-cyberpunk */
+body:not(.theme-cyberpunk) .from-purple-600,
+body:not(.theme-cyberpunk) .hover\:from-purple-500:hover {
+  --tw-gradient-from: var(--accent-primary) !important;
+}
+
+/* ── Animations ───────────────────────────────────────────────── */
 @keyframes typeIn {
   from { opacity: 0; transform: translateX(-4px); }
   to   { opacity: 1; transform: translateX(0); }
 }
+.boot-line { animation: typeIn 0.15s ease forwards; }
 
-.boot-line {
-  animation: typeIn 0.15s ease forwards;
-}
-
-/* Glassmorphism card */
-.glass-card {
-  background: var(--bg-glass);
-  border: 1px solid var(--bg-glass-border);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-radius: var(--border-radius);
-  box-shadow: 0 4px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
-}
-
-/* Voice waveform animation */
 @keyframes voiceBar {
   0%, 100% { transform: scaleY(0.2); }
   50%       { transform: scaleY(1); }
 }
-
 .voice-bar {
   animation: voiceBar var(--dur, 0.8s) ease-in-out infinite;
   transform-origin: bottom;
   background: linear-gradient(to top, var(--accent-primary), var(--accent-secondary));
 }
 
-/* Scanline overlay for cyberpunk theme */
+/* ── Cyberpunk scanline ───────────────────────────────────────── */
 .theme-cyberpunk .jarvis-root::after {
   content: "";
   position: fixed;
@@ -436,11 +496,18 @@
     0deg,
     transparent,
     transparent 2px,
-    rgba(0,0,0,0.04) 2px,
-    rgba(0,0,0,0.04) 4px
+    rgba(0,0,0,0.035) 2px,
+    rgba(0,0,0,0.035) 4px
   );
   z-index: 9999;
 }
+
+/* ── Theme colour swatches (Settings page) ────────────────────── */
+.swatch-cyberpunk { background: linear-gradient(135deg, #040607 50%, #BF40FA); }
+.swatch-night     { background: linear-gradient(135deg, #071018 50%, #446983); }
+.swatch-morning   { background: linear-gradient(135deg, #0b1e33 50%, #338FBA); }
+.swatch-winter    { background: linear-gradient(135deg, #0e1e30 50%, #cadbe5); }
+.swatch-desert    { background: linear-gradient(135deg, #130a04 50%, #C07850); }
 
 /**
  * Using the elevate system.

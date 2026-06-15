@@ -322,24 +322,15 @@ const useNotifications = () => {
 const Card: React.FC<{
   children: React.ReactNode;
   className?: string;
-  glow?: "cyan" | "purple" | "green" | "red" | "orange" | "none";
+  glow?: "accent" | "cyan" | "purple" | "green" | "red" | "orange" | "none";
   size?: "sm" | "md" | "lg" | "xl";
   padding?: "none" | "sm" | "md" | "lg";
   hover?: boolean;
   onClick?: () => void;
 }> = ({ children, className = "", glow = "none", size = "md", padding = "md", hover = false, onClick }) => {
-  const glowColors = {
-    cyan: "shadow-[0_0_30px_rgba(6,182,212,0.3)] border-cyan-500/30",
-    purple: "shadow-[0_0_30px_rgba(168,85,247,0.3)] border-purple-500/30",
-    green: "shadow-[0_0_30px_rgba(34,197,94,0.3)] border-green-500/30",
-    red: "shadow-[0_0_30px_rgba(239,68,68,0.3)] border-red-500/30",
-    orange: "shadow-[0_0_30px_rgba(249,115,22,0.3)] border-orange-500/30",
-    none: "",
-  };
-
   const sizes = {
-    sm: "rounded-lg",
-    md: "rounded-xl",
+    sm: "rounded-xl",
+    md: "rounded-2xl",
     lg: "rounded-2xl",
     xl: "rounded-3xl",
   };
@@ -351,9 +342,22 @@ const Card: React.FC<{
     lg: "p-8",
   };
 
+  // All glow variants use theme CSS vars — no hardcoded purple/cyan
+  const glowStyle: React.CSSProperties = glow === "none" ? {} : {
+    borderColor: glow === "red"    ? "rgba(239,68,68,0.35)"
+               : glow === "green" ? "rgba(34,197,94,0.35)"
+               : glow === "orange" ? "rgba(249,115,22,0.35)"
+               : "color-mix(in srgb, var(--accent-primary) 38%, transparent)",
+    boxShadow: glow === "red"    ? "0 0 28px rgba(239,68,68,0.25)"
+             : glow === "green" ? "0 0 28px rgba(34,197,94,0.25)"
+             : glow === "orange" ? "0 0 28px rgba(249,115,22,0.25)"
+             : "var(--glow-primary)",
+  };
+
   return (
     <motion.div
-      className={`bg-black/40 backdrop-blur-xl border ${glowColors[glow]} ${sizes[size]} ${paddings[padding]} ${hover ? "cursor-pointer transition-all duration-300 hover:scale-105" : ""} ${className}`}
+      className={`glass-card border ${sizes[size]} ${paddings[padding]} ${hover ? "cursor-pointer transition-all duration-300" : ""} ${className}`}
+      style={glowStyle}
       onClick={onClick}
       whileHover={hover ? { scale: 1.02 } : {}}
       whileTap={onClick ? { scale: 0.98 } : {}}
@@ -785,18 +789,66 @@ export default function JarvisUI() {
             Theme
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-            {(Object.values(THEMES) as typeof THEMES[keyof typeof THEMES][]).map(t => (
-              <button
-                key={t.id}
-                onClick={() => setTheme(t.id as ThemeId)}
-                className={`p-4 rounded-xl border text-left transition-all ${theme === t.id ? "border-purple-500/60 bg-purple-950/40" : "border-white/10 bg-black/20 hover:border-white/30"}`}
-              >
-                <div className={`w-full h-2 rounded-full mb-3`} style={{ background: t.id === "cyberpunk" ? "linear-gradient(90deg,#a855f7,#06b6d4)" : t.id === "night" ? "linear-gradient(90deg,#1e3a5f,#0ea5e9)" : t.id === "morning" ? "linear-gradient(90deg,#f59e0b,#fde68a)" : t.id === "winter" ? "linear-gradient(90deg,#bfdbfe,#93c5fd)" : "linear-gradient(90deg,#d97706,#fcd34d)" }} />
-                <div className="text-xs font-mono font-bold text-white/80">{t.name}</div>
-                <div className="text-[10px] text-white/40 mt-0.5">{t.description}</div>
-                {theme === t.id && <CheckCircle className="w-3.5 h-3.5 text-purple-400 mt-2" />}
-              </button>
-            ))}
+            {(Object.values(THEMES) as typeof THEMES[keyof typeof THEMES][]).map(t => {
+              const palettes: Record<string, { bg: string; bar: string; dots: string[] }> = {
+                cyberpunk: {
+                  bg: "#040607",
+                  bar: "linear-gradient(90deg,#BF40FA,#4928C2)",
+                  dots: ["#BF40FA","#4928C2","#E3D9FC","#5B2A62","#040607"],
+                },
+                night: {
+                  bg: "#071018",
+                  bar: "linear-gradient(90deg,#38506A,#7991A8)",
+                  dots: ["#071018","#1C2B38","#38506A","#446983","#7991A8"],
+                },
+                morning: {
+                  bg: "#0b1e33",
+                  bar: "linear-gradient(90deg,#024683,#338FBA,#A0C8CE)",
+                  dots: ["#024683","#338FBA","#A0C8CE","#436677","#D2E5DB"],
+                },
+                winter: {
+                  bg: "#0e1e30",
+                  bar: "linear-gradient(90deg,#152f57,#cadbe5)",
+                  dots: ["#152f57","#2a4876","#9aaab7","#cadbe5","#ecf1f7"],
+                },
+                desert: {
+                  bg: "#130a04",
+                  bar: "linear-gradient(90deg,#8C3B1A,#C07850,#F0DEB4)",
+                  dots: ["#8C3B1A","#C07850","#A87848","#F0DEB4","#F5EDD0"],
+                },
+              };
+              const p = palettes[t.id];
+              const isActive = theme === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTheme(t.id as ThemeId)}
+                  className="p-3 rounded-2xl border text-left transition-all duration-300 overflow-hidden relative"
+                  style={{
+                    background: p.bg,
+                    borderColor: isActive ? t.vars["--accent-primary"] : "rgba(255,255,255,0.10)",
+                    boxShadow: isActive ? `0 0 20px ${t.vars["--accent-primary"]}55, inset 0 0 20px ${t.vars["--accent-primary"]}08` : "none",
+                    transform: isActive ? "scale(1.03)" : "scale(1)",
+                  }}
+                >
+                  {/* Colour bar */}
+                  <div className="w-full h-1.5 rounded-full mb-3" style={{ background: p.bar }} />
+                  {/* Palette dots */}
+                  <div className="flex gap-1 mb-2.5">
+                    {p.dots.map(c => (
+                      <div key={c} className="w-3 h-3 rounded-full border border-white/10 flex-shrink-0" style={{ background: c }} />
+                    ))}
+                  </div>
+                  <div className="text-[11px] font-mono font-bold text-white/90">{t.name}</div>
+                  <div className="text-[9px] text-white/40 mt-0.5 leading-tight">{t.description}</div>
+                  {isActive && (
+                    <div className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center" style={{ background: t.vars["--accent-primary"] }}>
+                      <CheckCircle className="w-3 h-3 text-black" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </Card>
       </div>
