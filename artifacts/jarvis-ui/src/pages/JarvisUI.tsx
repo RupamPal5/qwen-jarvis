@@ -147,6 +147,7 @@ import {
   Sprout,
   Apple,
   Wheat,
+  Sparkles,
 } from "lucide-react";
 import { useStore, type Message } from "../store";
 import { THEMES, applyTheme, type ThemeId } from "../theme";
@@ -177,6 +178,7 @@ import KnowledgeGraph from "../components/KnowledgeGraph";
 import CircadianSync from "../components/CircadianSync";
 import PanicRoom from "../components/PanicRoom";
 import DeadMansSwitch from "../components/DeadMansSwitch";
+import { EVOLUTION_NAV, EVOLUTION_COMPONENTS } from "../evolution/registry";
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -869,6 +871,12 @@ export default function JarvisUI() {
     { id: "files",       label: "File Manager",     icon: Folder,          group: "sys"  },
     { id: "iot",         label: "IoT Devices",      icon: Smartphone,      group: "sys"  },
     { id: "settings",    label: "Settings",         icon: Settings,        group: "sys"  },
+    ...EVOLUTION_NAV.map((e) => ({
+      id: e.id,
+      label: e.label,
+      icon: Sparkles,
+      group: e.group,
+    })),
   ];
 
   return (
@@ -1064,6 +1072,11 @@ export default function JarvisUI() {
           {activeView === "files" && <FileManager />}
           {activeView === "iot" && <IoTDeviceControl />}
           {activeView === "knowledge" && <KnowledgeGraph />}
+          {EVOLUTION_NAV.map((entry) => {
+            if (activeView !== entry.id) return null;
+            const Evolved = EVOLUTION_COMPONENTS[entry.componentExport];
+            return Evolved ? <Evolved key={entry.id} /> : null;
+          })}
         </main>
       </div>
       
