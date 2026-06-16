@@ -2,7 +2,7 @@ import { Router } from "express";
 
 const router = Router();
 
-const OLLAMA_BASE = process.env["OLLAMA_URL"] ?? "http://localhost:11434";
+const OLLAMA_BASE = process.env["OLLAMA_URL"]?? "http://localhost:11434";
 
 async function ollamaFetch(path: string, options?: RequestInit) {
   const res = await fetch(`${OLLAMA_BASE}${path}`, options);
@@ -25,7 +25,7 @@ router.get("/ollama/status", async (_req, res) => {
     const r = await ollamaFetch("/api/tags");
     if (!r.ok) { res.json({ online: false }); return; }
     const data = await r.json() as { models: { name: string; size: number; modified_at: string }[] };
-    res.json({ online: true, modelCount: data.models?.length ?? 0, models: data.models ?? [] });
+    res.json({ online: true, modelCount: data.models?.length?? 0, models: data.models?? [] });
   } catch {
     res.json({ online: false, modelCount: 0, models: [] });
   }
@@ -38,7 +38,7 @@ router.post("/ollama/chat", async (req, res) => {
     stream?: boolean;
   };
 
-  if (!model || !messages) {
+  if (!model ||!messages) {
     res.status(400).json({ error: "model and messages required" });
     return;
   }
@@ -55,7 +55,7 @@ router.post("/ollama/chat", async (req, res) => {
         body: JSON.stringify({ model, messages, stream: true }),
       });
 
-      if (!r.ok || !r.body) {
+      if (!r.ok ||!r.body) {
         res.write(`data: ${JSON.stringify({ error: "Ollama error" })}\n\n`);
         res.end();
         return;
@@ -99,7 +99,7 @@ router.post("/ollama/chat", async (req, res) => {
 
 router.post("/ollama/generate", async (req, res) => {
   const { model, prompt, stream } = req.body as { model: string; prompt: string; stream?: boolean };
-  if (!model || !prompt) { res.status(400).json({ error: "model and prompt required" }); return; }
+  if (!model ||!prompt) { res.status(400).json({ error: "model and prompt required" }); return; }
 
   try {
     if (stream) {
@@ -113,7 +113,7 @@ router.post("/ollama/generate", async (req, res) => {
         body: JSON.stringify({ model, prompt, stream: true }),
       });
 
-      if (!r.ok || !r.body) { res.write(`data: ${JSON.stringify({ error: "Ollama error" })}\n\n`); res.end(); return; }
+      if (!r.ok ||!r.body) { res.write(`data: ${JSON.stringify({ error: "Ollama error" })}\n\n`); res.end(); return; }
 
       const reader = r.body.getReader();
       const decoder = new TextDecoder();

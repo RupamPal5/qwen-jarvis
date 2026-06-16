@@ -291,7 +291,7 @@ const useNotifications = () => {
 
   const addNotification = useCallback((notification: Omit<Notification, "id" | "timestamp" | "read">) => {
     const newNotification: Notification = {
-      ...notification,
+     ...notification,
       id: generateId(),
       timestamp: new Date(),
       read: false,
@@ -307,7 +307,7 @@ const useNotifications = () => {
   }, []);
 
   const removeNotification = useCallback((id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    setNotifications((prev) => prev.filter((n) => n.id!== id));
   }, []);
 
   return {
@@ -345,24 +345,24 @@ const Card: React.FC<{
   };
 
   // All glow variants use theme CSS vars — no hardcoded purple/cyan
-  const glowStyle: React.CSSProperties = glow === "none" ? {} : {
-    borderColor: glow === "red"    ? "rgba(239,68,68,0.35)"
-               : glow === "green" ? "rgba(34,197,94,0.35)"
-               : glow === "orange" ? "rgba(249,115,22,0.35)"
+  const glowStyle: React.CSSProperties = glow === "none"? {} : {
+    borderColor: glow === "red"   ? "rgba(239,68,68,0.35)"
+               : glow === "green"? "rgba(34,197,94,0.35)"
+               : glow === "orange"? "rgba(249,115,22,0.35)"
                : "color-mix(in srgb, var(--accent-primary) 38%, transparent)",
-    boxShadow: glow === "red"    ? "0 0 28px rgba(239,68,68,0.25)"
-             : glow === "green" ? "0 0 28px rgba(34,197,94,0.25)"
-             : glow === "orange" ? "0 0 28px rgba(249,115,22,0.25)"
+    boxShadow: glow === "red"   ? "0 0 28px rgba(239,68,68,0.25)"
+             : glow === "green"? "0 0 28px rgba(34,197,94,0.25)"
+             : glow === "orange"? "0 0 28px rgba(249,115,22,0.25)"
              : "var(--glow-primary)",
   };
 
   return (
     <motion.div
-      className={`glass-card border ${sizes[size]} ${paddings[padding]} ${hover ? "cursor-pointer transition-all duration-300" : ""} ${className}`}
+      className={`glass-card border ${sizes[size]} ${paddings[padding]} ${hover? "cursor-pointer transition-all duration-300" : ""} ${className}`}
       style={glowStyle}
       onClick={onClick}
-      whileHover={hover ? { scale: 1.02 } : {}}
-      whileTap={onClick ? { scale: 0.98 } : {}}
+      whileHover={hover? { scale: 1.02 } : {}}
+      whileTap={onClick? { scale: 0.98 } : {}}
     >
       {children}
     </motion.div>
@@ -398,11 +398,11 @@ const Button: React.FC<{
       className={`${variants[variant]} ${sizes[size]} rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
       onClick={onClick}
       disabled={disabled || loading}
-      whileHover={!disabled ? { scale: 1.05 } : {}}
-      whileTap={!disabled ? { scale: 0.95 } : {}}
+      whileHover={!disabled? { scale: 1.05 } : {}}
+      whileTap={!disabled? { scale: 0.95 } : {}}
     >
       {loading && <RefreshCw className="w-4 h-4 animate-spin" />}
-      {icon && !loading && icon}
+      {icon &&!loading && icon}
       {children}
     </motion.button>
   );
@@ -435,9 +435,9 @@ const ProgressBar: React.FC<{
 
   return (
     <div className={`w-full ${className}`}>
-      <div className={`bg-black/50 rounded-full overflow-hidden ${heights[size]}`}>
+      <div className="bg-black/50 rounded-full overflow-hidden ${heights[size]}">
         <motion.div
-          className={`h-full bg-gradient-to-r ${colors[color]} ${animated ? "animate-pulse" : ""}`}
+          className={`h-full bg-gradient-to-r ${colors[color]} ${animated? "animate-pulse" : ""}`}
           initial={{ width: 0 }}
           animate={{ width: `${percentage}%` }}
           transition={{ duration: 0.5, ease: "easeOut" }}
@@ -473,7 +473,7 @@ const Badge: React.FC<{
   };
 
   return (
-    <span className={`${variants[variant]} ${sizes[size]} rounded-full border font-semibold inline-flex items-center gap-1 ${pulse ? "animate-pulse" : ""}`}>
+    <span className={`${variants[variant]} ${sizes[size]} rounded-full border font-semibold inline-flex items-center gap-1 ${pulse? "animate-pulse" : ""}`}>
       {children}
     </span>
   );
@@ -505,7 +505,7 @@ export default function JarvisUI() {
   useEffect(() => {
     if (!themePanelOpen) return;
     const handler = (e: MouseEvent) => {
-      if (themePanelRef.current && !themePanelRef.current.contains(e.target as Node)) {
+      if (themePanelRef.current &&!themePanelRef.current.contains(e.target as Node)) {
         setThemePanelOpen(false);
       }
     };
@@ -621,28 +621,28 @@ export default function JarvisUI() {
               <MessageSquare className="w-5 h-5 text-purple-400" />
               Neural Interface
             </h3>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <Badge variant="info">JARVIS v5.0</Badge>
               <Badge variant="success">Active</Badge>
             </div>
           </div>
           
           <div ref={chatContainerRef} className="flex-1 overflow-y-auto space-y-4 mb-4">
-            {messages.length === 0 ? (
+            {messages.length === 0? (
               <div className="h-full flex flex-col items-center justify-center text-white/40">
                 <Brain className="w-16 h-16 mb-4 opacity-50" />
                 <p className="text-sm">Initialize conversation with JARVIS</p>
               </div>
             ) : (
               messages.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div key={msg.id} className={`flex ${msg.role === "user"? "justify-end" : "justify-start"}`}>
                   <div className={`max-w-[80%] p-4 rounded-xl ${
                     msg.role === "user" 
-                      ? "bg-purple-600/20 border border-purple-500/30" 
+                     ? "bg-purple-600/20 border border-purple-500/30" 
                       : "bg-cyan-600/20 border border-cyan-500/30"
                   }`}>
                     <div className="text-xs text-white/60 mb-1">
-                      {msg.role === "user" ? "Architect" : "JARVIS"} • {formatTimestamp(new Date(msg.timestamp))}
+                      {msg.role === "user"? "Architect" : "JARVIS"} • {formatTimestamp(new Date(msg.timestamp))}
                     </div>
                     <div className="text-sm text-white">{msg.content}</div>
                   </div>
@@ -746,7 +746,7 @@ export default function JarvisUI() {
   );
   
   const [ollamaUrlVal, setOllamaUrlVal] = useState(
-    () => localStorage.getItem("jarvis_ollama_url") ?? "http://localhost:11434"
+    () => localStorage.getItem("jarvis_ollama_url")?? "http://localhost:11434"
   );
   const saveOllamaUrl = useCallback(() => {
     localStorage.setItem("jarvis_ollama_url", ollamaUrlVal.replace(/\/+$/, ""));
@@ -825,12 +825,12 @@ export default function JarvisUI() {
                 <button
                   key={t.id}
                   onClick={() => setTheme(t.id as ThemeId)}
-                  className="p-3 rounded-2xl border text-left transition-all duration-300 overflow-hidden relative"
+                  className="p-3 rounded-2xl border backdrop-blur-xl transition-all w-48"
                   style={{
                     background: p.bg,
-                    borderColor: isActive ? t.vars["--accent-primary"] : "rgba(255,255,255,0.10)",
-                    boxShadow: isActive ? `0 0 20px ${t.vars["--accent-primary"]}55, inset 0 0 20px ${t.vars["--accent-primary"]}08` : "none",
-                    transform: isActive ? "scale(1.03)" : "scale(1)",
+                    borderColor: isActive? t.vars["--accent-primary"] : "rgba(255,255,255,0.10)",
+                    boxShadow: isActive? `0 0 20px ${t.vars["--accent-primary"]}55, inset 0 0 20px ${t.vars["--accent-primary"]}08` : "none",
+                    transform: isActive? "scale(1.03)" : "scale(1)",
                   }}
                 >
                   {/* Colour bar */}
@@ -838,14 +838,14 @@ export default function JarvisUI() {
                   {/* Palette dots */}
                   <div className="flex gap-1 mb-2.5">
                     {p.dots.map(c => (
-                      <div key={c} className="w-3 h-3 rounded-full border border-white/10 flex-shrink-0" style={{ background: c }} />
+                      <div key={c} className="w-3 h-3 rounded-full border border-white/10" style={{ background: c }} />
                     ))}
                   </div>
                   <div className="text-[11px] font-mono font-bold text-white/90">{t.name}</div>
-                  <div className="text-[9px] text-white/40 mt-0.5 leading-tight">{t.description}</div>
+                  <div className="text-[9px] text-white/30 mt-0.5 leading-tight">{t.description}</div>
                   {isActive && (
                     <div className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center" style={{ background: t.vars["--accent-primary"] }}>
-                      <CheckCircle className="w-3 h-3 text-black" />
+                      <CheckCircle className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
                     </div>
                   )}
                 </button>
@@ -871,7 +871,7 @@ export default function JarvisUI() {
     { id: "files",       label: "File Manager",     icon: Folder,          group: "sys"  },
     { id: "iot",         label: "IoT Devices",      icon: Smartphone,      group: "sys"  },
     { id: "settings",    label: "Settings",         icon: Settings,        group: "sys"  },
-    ...EVOLUTION_NAV.map((e) => ({
+   ...EVOLUTION_NAV.map((e) => ({
       id: e.id,
       label: e.label,
       icon: Sparkles,
@@ -907,40 +907,40 @@ export default function JarvisUI() {
           </div>
           {/* System Status Badge */}
           <motion.div
-            className={`hidden sm:flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-mono font-bold tracking-widest cursor-pointer transition-all ${
+            className={`hidden sm:flex items-center gap-2 px-3 py-1.5 bg-black/40 rounded-full border text-[10px] font-mono font-bold tracking-widest cursor-pointer transition-all ${
               systemStatus === "ONLINE"
-                ? "border-emerald-500/50 text-emerald-400 bg-emerald-950/40"
+               ? "border-emerald-500/50 text-emerald-400 bg-emerald-950/40"
                 : systemStatus === "BOOTING"
-                ? "border-yellow-500/50 text-yellow-400 bg-yellow-950/40"
-                : "border-white/15 text-white/30 bg-black/30"
+               ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/50"
+                : "bg-white/15 text-white/30 bg-black/30"
             }`}
-            style={systemStatus === "OFFLINE" ? { borderColor: "rgba(255,255,255,0.12)" } : {}}
+            style={systemStatus === "OFFLINE"? { borderColor: "rgba(255,255,255,0.12)" } : {}}
             onClick={() => setActiveView("initialize")}
-            animate={systemStatus === "ONLINE" ? { boxShadow: ["0 0 0px rgba(52,211,153,0)", "0 0 12px rgba(52,211,153,0.4)", "0 0 0px rgba(52,211,153,0)"] } : {}}
+            animate={systemStatus === "ONLINE"? { boxShadow: ["0 0 0px rgba(52,211,153,0)", "0 0 12px rgba(52,211,153,0.4)", "0 0 0px rgba(52,211,153,0)"] } : {}}
             transition={{ repeat: Infinity, duration: 3 }}
           >
             <div className={`w-1.5 h-1.5 rounded-full ${
-              systemStatus === "ONLINE" ? "bg-emerald-400" : systemStatus === "BOOTING" ? "bg-yellow-400 animate-pulse" : "bg-white/20"
+              systemStatus === "ONLINE"? "bg-emerald-400" : systemStatus === "BOOTING"? "bg-yellow-400 animate-pulse" : "bg-white/20"
             }`} />
-            {systemStatus === "OFFLINE" ? "BOOT REQUIRED" : systemStatus === "BOOTING" ? "BOOTING..." : "GOD PROTOCOL ONLINE"}
+            {systemStatus === "OFFLINE"? "BOOT REQUIRED" : systemStatus === "BOOTING"? "BOOTING..." : "GOD PROTOCOL ONLINE"}
           </motion.div>
 
           {/* Ollama Status Badge */}
           <motion.div
             className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono font-bold tracking-widest cursor-pointer transition-all"
             style={ollamaOnline === true
-              ? { borderColor: "color-mix(in srgb, var(--accent-primary) 45%, transparent)", color: "var(--accent-primary)", background: "color-mix(in srgb, var(--accent-primary) 12%, transparent)" }
+             ? { borderColor: "color-mix(in srgb, var(--accent-primary) 45%, transparent)", color: "var(--accent-primary)", background: "color-mix(in srgb, var(--accent-primary) 12%, transparent)" }
               : { borderColor: "rgba(239,68,68,0.35)", color: "rgba(239,68,68,0.8)", background: "rgba(239,68,68,0.08)" }
             }
             onClick={() => setActiveView("chat")}
-            animate={ollamaOnline === true ? { boxShadow: ["0 0 0px transparent", `0 0 10px color-mix(in srgb, var(--accent-primary) 40%, transparent)`, "0 0 0px transparent"] } : {}}
+            animate={ollamaOnline === true? { boxShadow: ["0 0 0px transparent", `0 0 10px color-mix(in srgb, var(--accent-primary) 40%, transparent)`, "0 0 0px transparent"] } : {}}
             transition={{ repeat: Infinity, duration: 4 }}
-            title={ollamaOnline === true ? `Ollama online · ${ollamaModelCount} model${ollamaModelCount !== 1 ? "s" : ""}` : "Ollama offline — click to set up"}
+            title={ollamaOnline === true? `Ollama online · ${ollamaModelCount} model${ollamaModelCount!== 1? "s" : ""}` : "Ollama offline — click to set up"}
           >
-            <div className={`w-1.5 h-1.5 rounded-full ${ollamaOnline === true ? "animate-pulse" : ""}`}
-              style={{ background: ollamaOnline === true ? "var(--accent-primary)" : "rgba(239,68,68,0.8)" }}
+            <div className={`w-1.5 h-1.5 rounded-full ${ollamaOnline === true? "animate-pulse" : ""}`}
+              style={{ background: ollamaOnline === true? "var(--accent-primary)" : "rgba(239,68,68,0.8)" }}
             />
-            {ollamaOnline === true ? `AI · ${ollamaModelCount}M` : "AI OFFLINE"}
+            {ollamaOnline === true? `AI · ${ollamaModelCount}M` : "AI OFFLINE"}
           </motion.div>
         </div>
         
@@ -953,7 +953,7 @@ export default function JarvisUI() {
           {/* Theme Switcher */}
           <div className="relative" ref={themePanelRef}>
             <button
-              onClick={() => setThemePanelOpen(p => !p)}
+              onClick={() => setThemePanelOpen(p =>!p)}
               className="flex items-center gap-2 px-3 py-1.5 bg-black/40 rounded-lg border border-white/10 hover:border-purple-500/30 transition-all text-xs text-white/70 hover:text-purple-400"
             >
               <Sliders className="w-3.5 h-3.5" />
@@ -975,7 +975,7 @@ export default function JarvisUI() {
                       key={t.id}
                       onClick={() => { setTheme(t.id as ThemeId); setThemePanelOpen(false); }}
                       className={`w-full flex items-center justify-between px-3 py-2.5 text-xs transition-all hover:bg-white/5 ${
-                        theme === t.id ? "text-purple-300 bg-purple-950/40" : "text-white/60"
+                        theme === t.id? "text-purple-300 bg-purple-950/40" : "text-white/60"
                       }`}
                     >
                       <div>
@@ -1015,7 +1015,7 @@ export default function JarvisUI() {
                     onClick={() => setActiveView(item.id)}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
                       activeView === item.id
-                        ? "nav-active"
+                       ? "nav-active"
                         : "text-white/50 hover:bg-white/5 hover:text-white/90"
                     }`}
                   >
@@ -1028,7 +1028,7 @@ export default function JarvisUI() {
           )}
         </AnimatePresence>
         
-        <main className="flex-1 overflow-auto" style={{ padding: activeView === "terminal" ? 0 : "1.5rem" }}>
+        <main className="flex-1 overflow-auto" style={{ padding: activeView === "terminal"? 0 : "1.5rem" }}>
           {activeView === "dashboard" && renderDashboard()}
           {activeView === "settings" && renderSettings()}
 
@@ -1073,9 +1073,9 @@ export default function JarvisUI() {
           {activeView === "iot" && <IoTDeviceControl />}
           {activeView === "knowledge" && <KnowledgeGraph />}
           {EVOLUTION_NAV.map((entry) => {
-            if (activeView !== entry.id) return null;
+            if (activeView!== entry.id) return null;
             const Evolved = EVOLUTION_COMPONENTS[entry.componentExport];
-            return Evolved ? <Evolved key={entry.id} /> : null;
+            return Evolved? <Evolved key={entry.id} /> : null;
           })}
         </main>
       </div>
@@ -1089,9 +1089,9 @@ export default function JarvisUI() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 100 }}
               className={`p-4 rounded-lg border backdrop-blur-xl max-w-sm ${
-                notification.type === "SUCCESS" ? "bg-green-600/20 border-green-500/30" :
-                notification.type === "ERROR" ? "bg-red-600/20 border-red-500/30" :
-                notification.type === "WARNING" ? "bg-yellow-600/20 border-yellow-500/30" :
+                notification.type === "SUCCESS"? "bg-green-600/20 border-green-500/30" :
+                notification.type === "ERROR"? "bg-red-600/20 border-red-500/30" :
+                notification.type === "WARNING"? "bg-yellow-600/20 border-yellow-500/30" :
                 "bg-cyan-600/20 border-cyan-500/30"
               }`}
             >
