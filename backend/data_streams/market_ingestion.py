@@ -1,55 +1,107 @@
-import asyncio
-import websockets
-import json
+import os
+import ast
+import shutil
 
-class MarketDataStream:
-    def __init__(self, api_url):
-        self.api_url = api_url
-        self.websocket = None
-        self.listeners = []
-
-    async def connect(self):
+class DynamicCodePatcher:
+    @staticmethod
+    def read_file_safely(filepath):
+        """
+        Safely reads an existing code file.
+        
+        Args:
+            filepath (str): The path to the file to be read.
+            
+        Returns:
+            str: The content of the file.
+        """
         try:
-            self.websocket = await websockets.connect(self.api_url)
-            print("Connected to market data stream")
-            await self.start_listening()
+            with open(filepath, 'r') as file:
+                return file.read()
+        except FileNotFoundError:
+            print(f"File not found: {filepath}")
+            return None
         except Exception as e:
-            print(f"Failed to connect to market data stream: {e}")
+            print(f"Failed to read file: {e}")
+            return None
 
-    async def start_listening(self):
-        while True:
+    @staticmethod
+    async def generate_patch_instruction(market_signal):
+        """
+        Generates a patch instruction using qwen2.5-coder-7b.
+        
+        Args:
+            market_signal (dict): The market signal containing the necessary information.
+            
+        Returns:
+            str: The generated patch code.
+        """
+        # Placeholder implementation for demonstration
+        return "def new_function():\n    print('Patch applied')"
+
+    @staticmethod
+    def apply_hot_patch(filepath, new_code):
+        """
+        Applies a hot patch to the file without restarting the server.
+        
+        Args:
+            filepath (str): The path to the file to be patched.
+            new_code (str): The new code to be written to the file.
+            
+        Returns:
+            bool: True if the patch was applied successfully, False otherwise.
+        """
+        try:
+            # Create a backup of the original file
+            backup_path = f"{filepath}.bak"
+            shutil.copy(filepath, backup_path)
+            print(f"Backup created at {backup_path}")
+
+            # Write new code to the file
+            with open(filepath, 'w') as file:
+                file.write(new_code)
+
+            # Validate syntax using ast module
             try:
-                message = await self.websocket.recv()
-                data = json.loads(message)
-                for listener in self.listeners:
-                    await listener(data)
-            except websockets.exceptions.ConnectionClosed as e:
-                print(f"WebSocket connection closed: {e}")
-                await asyncio.sleep(5)  # Wait before reconnecting
-                await self.connect()
+                ast.parse(new_code)
+                print("Syntax is valid.")
+                return True
+            except SyntaxError as e:
+                print(f"Syntax error: {e}")
+                return False
 
-    async def detect_volatility_threshold(self, symbol, threshold):
-        for listener in self.listeners:
-            if listener.__name__ == "volatility_listener":
-                await listener(symbol, threshold)
+        except Exception as e:
+            print(f"Failed to apply patch: {e}")
+            return False
 
-    async def trigger_code_update_signal(self):
-        for listener in self.listeners:
-            if listener.__name__ == "code_update_listener":
-                await listener()
-
-    def add_listener(self, listener):
-        self.listeners.append(listener)
-
-async def volatility_listener(data, symbol, threshold):
-    # Implement logic to detect volatility
-    pass
-
-async def code_update_listener():
-    # Implement logic to trigger code update signal
-    pass
+    @staticmethod
+    def verify_patch_integrity(filepath):
+        """
+        Verifies the integrity of the updated file by checking its syntax.
+        
+        Args:
+            filepath (str): The path to the file to be verified.
+            
+        Returns:
+            bool: True if the file has valid syntax, False otherwise.
+        """
+        try:
+            with open(filepath, 'r') as file:
+                code = file.read()
+                ast.parse(code)
+                print("Syntax is valid.")
+                return True
+        except SyntaxError as e:
+            print(f"Syntax error: {e}")
+            return False
 
 # Example usage
 if __name__ == "__main__":
-    market_stream = MarketDataStream("wss://api.binance.com/api/v3/ws")
-    asyncio.run(market_stream.connect())
+    patcher = DynamicCodePatcher()
+    filepath = "example.py"
+    original_code = patcher.read_file_safely(filepath)
+    if original_code is not None:
+        new_code = await patcher.generate_patch_instruction({"symbol": "AAPL", "threshold": 1.5})
+        if patcher.apply_hot_patch(filepath, new_code):
+            print("Patch applied successfully.")
+        else:
+            print("Failed to apply patch.")
