@@ -25,6 +25,10 @@ def get_circadian_mode():
         return 'HIGH_SIGNAL_BULLETS'  # Morning: Short, punchy updates
     elif 22 <= hour or hour <= 2:
         return 'RELAXED_LONG_FORM'    # Night: Detailed, calm explanations
+    elif 10 < hour <= 12:
+        return 'INFORMATIVE'          # Late morning: Detailed, informative updates
+    elif 12 < hour <= 18:
+        return 'STANDARD'             # Afternoon: Normal professional tone
     else:
         return 'STANDARD'             # Day: Normal professional tone
 
