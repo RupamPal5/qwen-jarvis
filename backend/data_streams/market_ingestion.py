@@ -1,6 +1,7 @@
 import os
 import ast
 import shutil
+import asyncio
 
 class DynamicCodePatcher:
     @staticmethod
@@ -95,7 +96,7 @@ class DynamicCodePatcher:
             return False
 
 # Example usage
-if __name__ == "__main__":
+async def main():
     patcher = DynamicCodePatcher()
     filepath = "example.py"
     original_code = patcher.read_file_safely(filepath)
@@ -105,3 +106,7 @@ if __name__ == "__main__":
             print("Patch applied successfully.")
         else:
             print("Failed to apply patch.")
+
+# Run the example usage
+if __name__ == "__main__":
+    asyncio.run(main())
