@@ -1,112 +1,106 @@
-import subprocess
-import pexpect
-import psutil
+import React, { useState, useEffect } from 'react';
+import { TailwindProvider } from 'tailwindcss-react';
 
-class WSL2SystemBridge:
-    def __init__(self):
-        self.allowed_commands = {
-            "ls", "cd", "pwd", "echo", "cat", "grep", "find", "top", "htop", "free", "df", "nvidia-smi"
+const GlassPanel: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  return (
+    <div className="glass-panel">
+      {children}
+    </div>
+  );
+};
+
+const FFTVisualizer: React.FC<{ audioData: number[] }> = ({ audioData }) => {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      if (!ctx) return;
+
+      const width = canvasRef.current.width;
+      const height = canvasRef.current.height;
+
+      function draw() {
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.fillRect(0, 0, width, height);
+
+        const barWidth = (width / audioData.length) * 2;
+        let x = 0;
+
+        for (let i = 0; i < audioData.length; i++) {
+          const barHeight = audioData[i] * 2;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+          ctx.fillRect(x, height - barHeight, barWidth, barHeight);
+          x += barWidth + 1;
         }
 
-    def execute_wsl_command(self, command):
-        """
-        Runs commands in Ubuntu WSL2 using subprocess.
-        
-        Args:
-            command (str): The command to run.
-            
-        Returns:
-            str: Output of the command.
-        """
-        if not self.is_safe_command(command):
-            return "Error: Command is not allowed."
-        
-        try:
-            result = subprocess.run(["wsl", "-c", command], capture_output=True, text=True, check=True)
-            return result.stdout
-        except subprocess.CalledProcessError as e:
-            return f"Error: {e.stderr}"
+        requestAnimationFrame(draw);
+      }
 
-    def spawn_pty_shell(self):
-        """
-        Creates an interactive PTY session using pexpect.
-        
-        Returns:
-            pexpect.spawn: The PTY session object.
-        """
-        try:
-            shell = pexpect.spawn("wsl -c bash")
-            return shell
-        except Exception as e:
-            print(f"Error: {e}")
-            return None
+      draw();
+    }
+  }, [audioData]);
 
-    def open_external_application(self, app_name):
-        """
-        Launches browser/tools on host system.
-        
-        Args:
-            app_name (str): The name of the application to launch.
-            
-        Returns:
-            bool: True if the application was launched successfully, False otherwise.
-        """
-        try:
-            subprocess.run(["start", app_name], check=True)
-            return True
-        except subprocess.CalledProcessError as e:
-            print(f"Error: {e}")
-            return False
+  return (
+    <canvas ref={canvasRef} width="600" height="200"></canvas>
+  );
+};
 
-    def monitor_hardware_status(self):
-        """
-        Checks CPU/RAM/GPU usage.
-        
-        Returns:
-            dict: Dictionary containing hardware usage data.
-        """
-        cpu_usage = psutil.cpu_percent(interval=1)
-        memory_info = psutil.virtual_memory()
-        gpu_info = self.get_gpu_info()
-        
-        return {
-            "cpu_usage": cpu_usage,
-            "memory_usage": memory_info.percent,
-            "gpu_usage": gpu_info
-        }
+const CriticalActionModal: React.FC<{ isOpen: boolean, onClose: () => void, onConfirm: () => void }> = ({ isOpen, onClose, onConfirm }) => {
+  if (!isOpen) return null;
 
-    def is_safe_command(self, command):
-        """
-        Validates if the command is safe.
-        
-        Args:
-            command (str): The command to validate.
-            
-        Returns:
-            bool: True if the command is allowed, False otherwise.
-        """
-        return all(cmd not in command for cmd in self.allowed_commands)
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content glass-panel">
+        <h2>Confirm Action</h2>
+        <p>This action is critical. Are you sure?</p>
+        <button onClick={onConfirm}>Yes</button>
+        <button onClick={onClose}>No</button>
+      </div>
+    </div>
+  );
+};
 
-    def get_gpu_info(self):
-        """
-        Retrieves GPU usage information using nvidia-smi.
-        
-        Returns:
-            float: GPU usage percentage.
-        """
-        try:
-            result = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"], capture_output=True, text=True, check=True)
-            gpu_usage = float(result.stdout.strip())
-            return gpu_usage
-        except (subprocess.CalledProcessError, ValueError):
-            return 0.0
+const ThemeSwitcher: React.FC = () => {
+  const [theme, setTheme] = useState<'cyberpunk' | 'night' | 'morning' | 'winter' | 'desert'>('cyberpunk');
 
-# Example usage
-if __name__ == "__main__":
-    bridge = WSL2SystemBridge()
-    print(bridge.execute_wsl_command("ls -la"))
-    shell = bridge.spawn_pty_shell()
-    if shell:
-        shell.interact()
-    print(bridge.open_external_application("chrome"))
-    print(bridge.monitor_hardware_status())
+  return (
+    <select value={theme} onChange={(e) => setTheme(e.target.value as any)}>
+      <option value="cyberpunk">Cyberpunk</option>
+      <option value="night">Night Sky</option>
+      <option value="morning">Morning Sky</option>
+      <option value="winter">Winter</option>
+      <option value="desert">Desert</option>
+    </select>
+  );
+};
+
+const GlassmorphicUI: React.FC = () => {
+  const [audioData, setAudioData] = useState<number[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    // Simulate WebSocket audio data
+    const interval = setInterval(() => {
+      setAudioData(prev => [...prev, Math.random() * 100]);
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <TailwindProvider>
+      <div className="glassmorphic-ui">
+        <GlassPanel>
+          <h1>Glassmorphic UI</h1>
+          <FFTVisualizer audioData={audioData} />
+        </GlassPanel>
+        <CriticalActionModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onConfirm={() => setModalOpen(false)} />
+        <ThemeSwitcher />
+      </div>
+    </TailwindProvider>
+  );
+};
+
+export default GlassmorphicUI;
