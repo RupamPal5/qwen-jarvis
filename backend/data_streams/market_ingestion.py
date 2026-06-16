@@ -1,55 +1,74 @@
+from fastapi import FastAPI, WebSocket, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import asyncio
-import websockets
-import json
+from backend.consensus.tri_node_engine import TriNodeConsensusEngine
+from backend.audio.bidirectional_audio import AudioNeuralMatrix
+from backend.system.wsl2_bridge import WSL2SystemBridge
+from backend.code_evolution.hot_patcher import DynamicCodePatcher
 
-class MarketDataStream:
-    def __init__(self, api_url):
-        self.api_url = api_url
-        self.websocket = None
-        self.listeners = []
+app = FastAPI()
 
-    async def connect(self):
+# CORS configuration
+origins = [
+    "http://localhost",
+    "http://localhost:3000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Initialize components
+consensus_engine = TriNodeConsensusEngine()
+audio_matrix = AudioNeuralMatrix()
+wsl_bridge = WSL2SystemBridge()
+code_patcher = DynamicCodePatcher()
+
+@app.post("/api/consensus/execute")
+async def execute_command(command: str):
+    try:
+        result = consensus_engine.execute_wsl_command(command)
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/audio/transcribe")
+async def transcribe_audio(audio_data: bytes):
+    # Placeholder for audio transcription logic
+    return {"transcription": "Transcribed text"}
+
+@app.websocket("/api/market/stream")
+async def market_stream(websocket: WebSocket):
+    await websocket.accept()
+    while True:
         try:
-            self.websocket = await websockets.connect(self.api_url)
-            print("Connected to market data stream")
-            await self.start_listening()
-        except Exception as e:
-            print(f"Failed to connect to market data stream: {e}")
+            data = await websocket.recv()
+            # Placeholder for processing market data
+            await websocket.send_text("Market data received")
+        except websockets.exceptions.ConnectionClosed as e:
+            break
 
-    async def start_listening(self):
-        while True:
-            try:
-                message = await self.websocket.recv()
-                data = json.loads(message)
-                for listener in self.listeners:
-                    await listener(data)
-            except websockets.exceptions.ConnectionClosed as e:
-                print(f"WebSocket connection closed: {e}")
-                await asyncio.sleep(5)  # Wait before reconnecting
-                await self.connect()
+@app.post("/api/system/wsl")
+async def execute_wsl_command(command: str):
+    try:
+        result = wsl_bridge.execute_wsl_command(command)
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    async def detect_volatility_threshold(self, symbol, threshold):
-        for listener in self.listeners:
-            if listener.__name__ == "volatility_listener":
-                await listener(symbol, threshold)
-
-    async def trigger_code_update_signal(self):
-        for listener in self.listeners:
-            if listener.__name__ == "code_update_listener":
-                await listener()
-
-    def add_listener(self, listener):
-        self.listeners.append(listener)
-
-async def volatility_listener(data, symbol, threshold):
-    # Implement logic to detect volatility
-    pass
-
-async def code_update_listener():
-    # Implement logic to trigger code update signal
-    pass
+@app.post("/api/code/patch")
+async def patch_code(patch_request: dict):
+    try:
+        new_code = await code_patcher.apply_hot_patch("example.py", patch_request["new_code"])
+        return {"success": new_code}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Example usage
 if __name__ == "__main__":
-    market_stream = MarketDataStream("wss://api.binance.com/api/v3/ws")
-    asyncio.run(market_stream.connect())
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
