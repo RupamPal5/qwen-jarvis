@@ -1,106 +1,55 @@
-import React, { useState, useEffect } from 'react';
-import { TailwindProvider } from 'tailwindcss-react';
+import asyncio
+import websockets
+import json
 
-const GlassPanel: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  return (
-    <div className="glass-panel">
-      {children}
-    </div>
-  );
-};
+class MarketDataStream:
+    def __init__(self, api_url):
+        self.api_url = api_url
+        self.websocket = None
+        self.listeners = []
 
-const FFTVisualizer: React.FC<{ audioData: number[] }> = ({ audioData }) => {
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+    async def connect(self):
+        try:
+            self.websocket = await websockets.connect(self.api_url)
+            print("Connected to market data stream")
+            await self.start_listening()
+        except Exception as e:
+            print(f"Failed to connect to market data stream: {e}")
 
-  useEffect(() => {
-    if (canvasRef.current) {
-      const ctx = canvasRef.current.getContext('2d');
-      if (!ctx) return;
+    async def start_listening(self):
+        while True:
+            try:
+                message = await self.websocket.recv()
+                data = json.loads(message)
+                for listener in self.listeners:
+                    await listener(data)
+            except websockets.exceptions.ConnectionClosed as e:
+                print(f"WebSocket connection closed: {e}")
+                await asyncio.sleep(5)  # Wait before reconnecting
+                await self.connect()
 
-      const width = canvasRef.current.width;
-      const height = canvasRef.current.height;
+    async def detect_volatility_threshold(self, symbol, threshold):
+        for listener in self.listeners:
+            if listener.__name__ == "volatility_listener":
+                await listener(symbol, threshold)
 
-      function draw() {
-        ctx.clearRect(0, 0, width, height);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-        ctx.fillRect(0, 0, width, height);
+    async def trigger_code_update_signal(self):
+        for listener in self.listeners:
+            if listener.__name__ == "code_update_listener":
+                await listener()
 
-        const barWidth = (width / audioData.length) * 2;
-        let x = 0;
+    def add_listener(self, listener):
+        self.listeners.append(listener)
 
-        for (let i = 0; i < audioData.length; i++) {
-          const barHeight = audioData[i] * 2;
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-          ctx.fillRect(x, height - barHeight, barWidth, barHeight);
-          x += barWidth + 1;
-        }
+async def volatility_listener(data, symbol, threshold):
+    # Implement logic to detect volatility
+    pass
 
-        requestAnimationFrame(draw);
-      }
+async def code_update_listener():
+    # Implement logic to trigger code update signal
+    pass
 
-      draw();
-    }
-  }, [audioData]);
-
-  return (
-    <canvas ref={canvasRef} width="600" height="200"></canvas>
-  );
-};
-
-const CriticalActionModal: React.FC<{ isOpen: boolean, onClose: () => void, onConfirm: () => void }> = ({ isOpen, onClose, onConfirm }) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="modal-overlay">
-      <div className="modal-content glass-panel">
-        <h2>Confirm Action</h2>
-        <p>This action is critical. Are you sure?</p>
-        <button onClick={onConfirm}>Yes</button>
-        <button onClick={onClose}>No</button>
-      </div>
-    </div>
-  );
-};
-
-const ThemeSwitcher: React.FC = () => {
-  const [theme, setTheme] = useState<'cyberpunk' | 'night' | 'morning' | 'winter' | 'desert'>('cyberpunk');
-
-  return (
-    <select value={theme} onChange={(e) => setTheme(e.target.value as any)}>
-      <option value="cyberpunk">Cyberpunk</option>
-      <option value="night">Night Sky</option>
-      <option value="morning">Morning Sky</option>
-      <option value="winter">Winter</option>
-      <option value="desert">Desert</option>
-    </select>
-  );
-};
-
-const GlassmorphicUI: React.FC = () => {
-  const [audioData, setAudioData] = useState<number[]>([]);
-  const [modalOpen, setModalOpen] = useState(false);
-
-  useEffect(() => {
-    // Simulate WebSocket audio data
-    const interval = setInterval(() => {
-      setAudioData(prev => [...prev, Math.random() * 100]);
-    }, 50);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <TailwindProvider>
-      <div className="glassmorphic-ui">
-        <GlassPanel>
-          <h1>Glassmorphic UI</h1>
-          <FFTVisualizer audioData={audioData} />
-        </GlassPanel>
-        <CriticalActionModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onConfirm={() => setModalOpen(false)} />
-        <ThemeSwitcher />
-      </div>
-    </TailwindProvider>
-  );
-};
-
-export default GlassmorphicUI;
+# Example usage
+if __name__ == "__main__":
+    market_stream = MarketDataStream("wss://api.binance.com/api/v3/ws")
+    asyncio.run(market_stream.connect())
