@@ -1,59 +1,112 @@
-import threading
-import queue
-import whisper
-import pyttsx3
-import json
-import numpy as np
-from scipy.fftpack import fft
+import subprocess
+import pexpect
+import psutil
 
-class AudioNeuralMatrix:
+class WSL2SystemBridge:
     def __init__(self):
-        self.stt_model = whisper.load_model("base")
-        self.tts_engine = pyttsx3.init()
-        self.audio_queue = queue.Queue()
-        self.fft_data_queue = queue.Queue()
+        self.allowed_commands = {
+            "ls", "cd", "pwd", "echo", "cat", "grep", "find", "top", "htop", "free", "df", "nvidia-smi"
+        }
 
-    def stream_transcription(self):
-        # Placeholder for real-time STT using Whisper
-        pass
-
-    def synthesize_speech(self, text):
-        # Placeholder for TTS using pyttsx3
-        self.tts_engine.say(text)
-        self.tts_engine.runAndWait()
-
-    def extract_fft_features(self, audio_buffer):
+    def execute_wsl_command(self, command):
         """
-        Extracts frequency spectrum data as JSON.
+        Runs commands in Ubuntu WSL2 using subprocess.
         
         Args:
-            audio_buffer (bytes): The audio buffer to process.
+            command (str): The command to run.
             
         Returns:
-            str: JSON string containing the frequency spectrum data.
+            str: Output of the command.
         """
-        audio_data = np.frombuffer(audio_buffer, dtype=np.int16)
-        fft_result = fft(audio_data)
-        freqs = np.fft.fftfreq(len(fft_result), d=0.0000625)  # Sample rate: 16kHz
-        spectrum_data = {
-            "frequencies": freqs.tolist(),
-            "amplitudes": np.abs(fft_result).tolist()
-        }
-        return json.dumps(spectrum_data)
+        if not self.is_safe_command(command):
+            return "Error: Command is not allowed."
+        
+        try:
+            result = subprocess.run(["wsl", "-c", command], capture_output=True, text=True, check=True)
+            return result.stdout
+        except subprocess.CalledProcessError as e:
+            return f"Error: {e.stderr}"
 
-    def stream_to_frontend(self, fft_data):
+    def spawn_pty_shell(self):
         """
-        Sends audio data via WebSocket.
+        Creates an interactive PTY session using pexpect.
+        
+        Returns:
+            pexpect.spawn: The PTY session object.
+        """
+        try:
+            shell = pexpect.spawn("wsl -c bash")
+            return shell
+        except Exception as e:
+            print(f"Error: {e}")
+            return None
+
+    def open_external_application(self, app_name):
+        """
+        Launches browser/tools on host system.
         
         Args:
-            fft_data (str): JSON string containing the frequency spectrum data.
+            app_name (str): The name of the application to launch.
+            
+        Returns:
+            bool: True if the application was launched successfully, False otherwise.
         """
-        # Placeholder for sending FFT data to frontend
-        pass
+        try:
+            subprocess.run(["start", app_name], check=True)
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"Error: {e}")
+            return False
+
+    def monitor_hardware_status(self):
+        """
+        Checks CPU/RAM/GPU usage.
+        
+        Returns:
+            dict: Dictionary containing hardware usage data.
+        """
+        cpu_usage = psutil.cpu_percent(interval=1)
+        memory_info = psutil.virtual_memory()
+        gpu_info = self.get_gpu_info()
+        
+        return {
+            "cpu_usage": cpu_usage,
+            "memory_usage": memory_info.percent,
+            "gpu_usage": gpu_info
+        }
+
+    def is_safe_command(self, command):
+        """
+        Validates if the command is safe.
+        
+        Args:
+            command (str): The command to validate.
+            
+        Returns:
+            bool: True if the command is allowed, False otherwise.
+        """
+        return all(cmd not in command for cmd in self.allowed_commands)
+
+    def get_gpu_info(self):
+        """
+        Retrieves GPU usage information using nvidia-smi.
+        
+        Returns:
+            float: GPU usage percentage.
+        """
+        try:
+            result = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"], capture_output=True, text=True, check=True)
+            gpu_usage = float(result.stdout.strip())
+            return gpu_usage
+        except (subprocess.CalledProcessError, ValueError):
+            return 0.0
 
 # Example usage
 if __name__ == "__main__":
-    audio_matrix = AudioNeuralMatrix()
-    audio_buffer = b'\x00' * 1024  # Placeholder audio buffer
-    fft_data = audio_matrix.extract_fft_features(audio_buffer)
-    print(fft_data)
+    bridge = WSL2SystemBridge()
+    print(bridge.execute_wsl_command("ls -la"))
+    shell = bridge.spawn_pty_shell()
+    if shell:
+        shell.interact()
+    print(bridge.open_external_application("chrome"))
+    print(bridge.monitor_hardware_status())
