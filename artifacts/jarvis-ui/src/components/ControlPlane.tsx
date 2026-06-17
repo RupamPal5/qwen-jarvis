@@ -47,9 +47,12 @@ export function ControlPlane() {
   });
   const [isApplying, setIsApplying] = useState(false);
   const [modelStatuses, setModelStatuses] = useState<Record<string, ModelStatus>>({});
+  const [healthMetrics, setHealthMetrics] = useState<HealthMetrics>({});
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [activePreset, setActivePreset] = useState<string>('');
   const [presetDropdownOpen, setPresetDropdownOpen] = useState(false);
+  const [isFetchingHealth, setIsFetchingHealth] = useState(false);
+  const [healthError, setHealthError] = useState<string | null>(null);
 
   // Initialize selected models from current roles
   useEffect(() => {
