@@ -373,6 +373,44 @@ def get_system_metrics() -> Dict:
             "error": str(e)
         }
 
+@router.get("/status/all")
+async def get_all_model_statuses(request: Request) -> Dict[str, Dict]:
+    """Get status of all models"""
+    # Validate client IP for rate limiting
+    client_ip = request.client.host if request.client else "unknown"
+    validator = get_request_validator()
+
+    if not validator.rate_limiter.check_rate_limit("model_status_all", client_ip, "chat"):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please try again later.")
+
+    try:
+        network_manager = await get_network_manager()
+        result = {}
+
+        for model_id, model in get_model_registry().models.items():
+            status = network_manager.get_model_status(model_id)
+            if status:
+                result[model_id] = {
+                    "available": status.available,
+                    "latency": status.latency,
+                    "last_checked": status.last_checked,
+                    "consecutive_failures": status.consecutive_failures,
+                    "is_disabled": status.is_disabled
+                }
+            else:
+                result[model_id] = {
+                    "available": False,
+                    "latency": None,
+                    "last_checked": None,
+                    "consecutive_failures": 0,
+                    "is_disabled": False
+                }
+
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get all model statuses: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get model statuses: {str(e)}")
+
 @router.get("/encryption/generate-key")
 async def generate_encryption_key(request: Request) -> Dict:
     """Generate a new encryption key for API keys.

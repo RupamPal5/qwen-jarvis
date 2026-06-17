@@ -12,17 +12,28 @@ import {
 } from './ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Loader2, Check, X, Cpu, Shield, Gavel, Zap, Activity, Rocket, ChevronDown } from 'lucide-react';
+import { Loader2, Check, X, Cpu, Shield, Gavel, Zap, Activity, Rocket, ChevronDown, AlertCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { GlassmorphicPanel } from './glassmorphic-panel';
 import { ModelEntry } from '../types/models';
+import { SkeletonCard, SkeletonDropdown, SkeletonLoader } from './SkeletonLoader';
 
 interface ModelStatus {
   model_id: string;
   status: 'healthy' | 'degraded' | 'unhealthy' | 'error' | 'unknown';
   latency?: number;
-  last_checked?: number;
+  last_checked?: string;
   is_local: boolean;
+  last_checked_timestamp?: number;
+}
+
+interface HealthMetrics {
+  [modelId: string]: {
+    latency?: number;
+    status: 'healthy' | 'degraded' | 'unhealthy' | 'error' | 'unknown';
+    last_checked?: string;
+    last_checked_timestamp?: number;
+  };
 }
 
 export function ControlPlane() {
@@ -51,8 +62,54 @@ export function ControlPlane() {
     }
   }, [roles]);
 
-  // Initialize WebSocket connection for real-time updates
+  // Fetch health metrics periodically
   useEffect(() => {
+    const fetchHealthMetrics = async () => {
+      if (modelsLoading || !Object.keys(models).length) return;
+
+      setIsFetchingHealth(true);
+      setHealthError(null);
+      try {
+        const response = await fetch('/api/models/status/all');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+
+        // Transform the data into our health metrics format
+        const newHealthMetrics: HealthMetrics = {};
+        Object.keys(models).forEach(modelId => {
+          if (data[modelId]) {
+            newHealthMetrics[modelId] = {
+              latency: data[modelId].latency,
+              status: data[modelId].available ? 'healthy' : 'unhealthy',
+              last_checked: data[modelId].last_checked,
+              last_checked_timestamp: data[modelId].last_checked ? new Date(data[modelId].last_checked).getTime() : undefined
+            };
+          } else {
+            newHealthMetrics[modelId] = {
+              status: 'unknown',
+              last_checked: undefined,
+              last_checked_timestamp: undefined
+            };
+          }
+        });
+        setHealthMetrics(newHealthMetrics);
+      } catch (error) {
+        console.error('Failed to fetch health metrics:', error);
+        setHealthError('Failed to load model health data');
+      } finally {
+        setIsFetchingHealth(false);
+      }
+    };
+
+    // Initial fetch
+    fetchHealthMetrics();
+
+    // Set up periodic fetching
+    const interval = setInterval(fetchHealthMetrics, 30000); // Every 30 seconds
+
+    // Initialize WebSocket connection for real-time updates
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const socket = new WebSocket(`${protocol}//${window.location.host}/ws/control-plane`);
 
@@ -67,11 +124,27 @@ export function ControlPlane() {
           ...prev,
           [data.model_id]: data.status
         }));
+
+        // Update health metrics with real-time data
+        setHealthMetrics(prev => ({
+          ...prev,
+          [data.model_id]: {
+            ...prev[data.model_id],
+            latency: data.status.latency,
+            status: data.status.available ? 'healthy' : 'unhealthy',
+            last_checked: data.status.last_checked,
+            last_checked_timestamp: data.status.last_checked ? new Date(data.status.last_checked).getTime() : undefined
+          }
+        }));
       }
     };
 
     socket.onclose = () => {
       console.log('Control Plane WebSocket disconnected');
+    };
+
+    socket.onerror = (error) => {
+      console.error('Control Plane WebSocket error:', error);
     };
 
     setWs(socket);
@@ -80,8 +153,9 @@ export function ControlPlane() {
       if (socket) {
         socket.close();
       }
+      clearInterval(interval);
     };
-  }, []);
+  }, [models, modelsLoading]);
 
   // Subscribe to model status updates
   useEffect(() => {
@@ -166,48 +240,97 @@ export function ControlPlane() {
   };
 
   const getModelStatusInfo = (modelId: string): ModelStatus => {
-    return modelStatuses[modelId] || {
+    const healthInfo = healthMetrics[modelId] || {};
+    return {
       model_id: modelId,
-      status: 'unknown',
+      status: healthInfo.status || 'unknown',
+      latency: healthInfo.latency,
+      last_checked: healthInfo.last_checked,
+      last_checked_timestamp: healthInfo.last_checked_timestamp,
       is_local: models[modelId]?.is_local || false
     };
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'healthy': return 'bg-green-500';
-      case 'degraded': return 'bg-yellow-500';
-      case 'unhealthy': return 'bg-red-500';
-      case 'error': return 'bg-red-600';
-      default: return 'bg-gray-500';
-    }
+  const getStatusColor = (status: string, latency?: number) => {
+    if (status === 'unhealthy' || status === 'error') return 'bg-red-500';
+    if (status === 'unknown') return 'bg-gray-500';
+    if (latency === undefined) return 'bg-gray-500';
+
+    if (latency < 500) return 'bg-green-500';
+    if (latency >= 500 && latency <= 1500) return 'bg-yellow-500';
+    return 'bg-red-500';
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'healthy': return <Check className="h-4 w-4 text-white" />;
-      case 'degraded': return <Activity className="h-4 w-4 text-white" />;
-      case 'unhealthy': return <X className="h-4 w-4 text-white" />;
-      case 'error': return <X className="h-4 w-4 text-white" />;
-      default: return <Zap className="h-4 w-4 text-white" />;
-    }
+  const getStatusIcon = (status: string, latency?: number) => {
+    if (status === 'unhealthy' || status === 'error') return <X className="h-4 w-4 text-white" />;
+    if (status === 'unknown') return <Zap className="h-4 w-4 text-white" />;
+
+    if (latency === undefined) return <Zap className="h-4 w-4 text-white" />;
+
+    if (latency < 500) return <Check className="h-4 w-4 text-white" />;
+    if (latency >= 500 && latency <= 1500) return <Activity className="h-4 w-4 text-white" />;
+    return <X className="h-4 w-4 text-white" />;
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'healthy': return 'Operational';
-      case 'degraded': return 'Degraded';
-      case 'unhealthy': return 'Unhealthy';
-      case 'error': return 'Error';
-      default: return 'Unknown';
-    }
+  const getStatusText = (status: string, latency?: number) => {
+    if (status === 'unhealthy' || status === 'error') return 'Unhealthy';
+    if (status === 'unknown') return 'Unknown';
+
+    if (latency === undefined) return 'Checking...';
+
+    if (latency < 500) return 'Operational';
+    if (latency >= 500 && latency <= 1500) return 'Degraded';
+    return 'Slow Response';
+  };
+
+  const getTimeSinceLastCheck = (timestamp?: number) => {
+    if (!timestamp) return 'Never checked';
+
+    const now = new Date().getTime();
+    const seconds = Math.floor((now - timestamp) / 1000);
+
+    if (seconds < 60) return `${seconds}s ago`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    return `${Math.floor(seconds / 3600)}h ago`;
   };
 
   if (modelsLoading || rolesLoading || presetsLoading) {
     return (
       <GlassmorphicPanel className="w-full p-6" glow="cyan">
-        <div className="flex justify-center items-center h-32">
-          <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+        <div className="space-y-6">
+          {/* Header skeleton */}
+          <div className="flex items-center justify-between">
+            <div>
+              <SkeletonLoader height="h-8" width="w-64" className="mb-2" />
+              <SkeletonLoader height="h-4" width="w-48" />
+            </div>
+            <div className="flex items-center space-x-4">
+              <SkeletonLoader height="h-8" width="w-32" />
+              <SkeletonLoader height="h-8" width="w-32" />
+            </div>
+          </div>
+
+          {/* Model configuration grid skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <SkeletonCard key={i} />
+            ))}
+          </div>
+
+          {/* Deploy button skeleton */}
+          <div className="flex justify-end">
+            <SkeletonLoader height="h-12" width="w-48" />
+          </div>
+
+          {/* System health section skeleton */}
+          <div className="mt-8">
+            <SkeletonLoader height="h-6" width="w-48" className="mb-4" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <SkeletonCard key={i} />
+              ))}
+            </div>
+          </div>
         </div>
       </GlassmorphicPanel>
     );
@@ -215,10 +338,23 @@ export function ControlPlane() {
 
   if (modelsError) {
     return (
-      <GlassmorphicPanel className="w-full p-6" glow="cyan">
-        <div className="flex flex-col items-center justify-center h-32">
-          <X className="h-8 w-8 text-red-500 mb-2" />
-          <p className="text-red-500">Failed to load model data</p>
+      <GlassmorphicPanel className="w-full p-6" glow="red">
+        <div className="flex flex-col items-center justify-center min-h-[300px] space-y-6">
+          <AlertCircle className="h-16 w-16 text-red-400" />
+          <h2 className="text-2xl font-bold text-red-300">MODEL DATA UNAVAILABLE</h2>
+          <p className="text-center text-gray-300 max-w-md">
+            Failed to load model registry data. The system cannot function without this information.
+          </p>
+          <div className="text-sm text-gray-400">
+            <p>Error: {modelsError}</p>
+          </div>
+          <Button
+            onClick={() => window.location.reload()}
+            className="bg-gradient-to-r from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:shadow-red-500/50 transition-all duration-200"
+          >
+            <RefreshCw className="mr-2 h-5 w-5" />
+            RETRY LOADING
+          </Button>
         </div>
       </GlassmorphicPanel>
     );
@@ -290,39 +426,60 @@ export function ControlPlane() {
                     <Badge variant={models[selectedModels.ARCHITECT]?.is_local ? 'secondary' : 'default'}>
                       {models[selectedModels.ARCHITECT]?.is_local ? 'LOCAL' : 'CLOUD'}
                     </Badge>
-                    <div className={`w-3 h-3 rounded-full ${getStatusColor(getModelStatusInfo(selectedModels.ARCHITECT).status)}`}>
-                      {getStatusIcon(getModelStatusInfo(selectedModels.ARCHITECT).status)}
+                    <div className={`w-3 h-3 rounded-full ${getStatusColor(
+                      getModelStatusInfo(selectedModels.ARCHITECT).status,
+                      getModelStatusInfo(selectedModels.ARCHITECT).latency
+                    )}`}>
+                      {getStatusIcon(
+                        getModelStatusInfo(selectedModels.ARCHITECT).status,
+                        getModelStatusInfo(selectedModels.ARCHITECT).latency
+                      )}
                     </div>
                   </>
                 )}
               </div>
             </CardHeader>
             <CardContent>
-              <Select
-                value={selectedModels.ARCHITECT}
-                onValueChange={(value) => handleModelChange('ARCHITECT', value)}
-              >
-                <SelectTrigger className="w-full bg-black/50 border-cyan-500/50 text-cyan-100 hover:bg-black/70">
-                  <SelectValue placeholder="Select Architect model" />
-                </SelectTrigger>
-                <SelectContent className="bg-black/80 border-cyan-500/30 text-cyan-100">
-                  {Object.entries(models).map(([modelId, model]) => (
-                    <SelectItem key={modelId} value={modelId}>
-                      <div className="flex items-center justify-between w-full">
-                        <span>{modelId}</span>
-                        <div className="flex items-center space-x-2">
-                          <Badge variant={model.is_local ? 'secondary' : 'default'}>
-                            {model.is_local ? 'LOCAL' : 'CLOUD'}
-                          </Badge>
-                          <div className={`w-4 h-4 rounded-full ${getStatusColor(getModelStatusInfo(modelId).status)}`}>
-                            {getStatusIcon(getModelStatusInfo(modelId).status)}
+              {isFetchingHealth && !healthMetrics[selectedModels.ARCHITECT || ''] ? (
+                <SkeletonDropdown />
+              ) : (
+                <Select
+                  value={selectedModels.ARCHITECT}
+                  onValueChange={(value) => handleModelChange('ARCHITECT', value)}
+                  disabled={isFetchingHealth}
+                >
+                  <SelectTrigger className="w-full bg-black/50 border-cyan-500/50 text-cyan-100 hover:bg-black/70">
+                    <SelectValue placeholder={isFetchingHealth ? "Loading models..." : "Select Architect model"} />
+                  </SelectTrigger>
+                  <SelectContent className="bg-black/80 border-cyan-500/30 text-cyan-100">
+                    {Object.entries(models).map(([modelId, model]) => {
+                      const statusInfo = getModelStatusInfo(modelId);
+                      return (
+                        <SelectItem key={modelId} value={modelId}>
+                          <div className="flex items-center justify-between w-full">
+                            <div className="flex items-center space-x-2">
+                              <span>{modelId}</span>
+                              {statusInfo.latency !== undefined && (
+                                <span className="text-xs text-gray-400">
+                                  {statusInfo.latency.toFixed(0)}ms
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Badge variant={model.is_local ? 'secondary' : 'default'}>
+                                {model.is_local ? 'LOCAL' : 'CLOUD'}
+                              </Badge>
+                              <div className={`w-4 h-4 rounded-full ${getStatusColor(statusInfo.status, statusInfo.latency)}`}>
+                                {getStatusIcon(statusInfo.status, statusInfo.latency)}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              )}
               {selectedModels.ARCHITECT && (
                 <div className="mt-4 p-3 bg-black/50 rounded-lg">
                   <div className="text-xs text-cyan-200 space-y-2">
@@ -341,15 +498,32 @@ export function ControlPlane() {
                     <div className="flex justify-between">
                       <span className="font-medium">Status:</span>
                       <span className="capitalize">
-                        {getStatusText(getModelStatusInfo(selectedModels.ARCHITECT).status)}
+                        {getStatusText(
+                          getModelStatusInfo(selectedModels.ARCHITECT).status,
+                          getModelStatusInfo(selectedModels.ARCHITECT).latency
+                        )}
                       </span>
                     </div>
                     {getModelStatusInfo(selectedModels.ARCHITECT).latency !== undefined && (
                       <div className="flex justify-between">
                         <span className="font-medium">Latency:</span>
-                        <span>{getModelStatusInfo(selectedModels.ARCHITECT).latency?.toFixed(2)}s</span>
+                        <span>{getModelStatusInfo(selectedModels.ARCHITECT).latency.toFixed(0)}ms</span>
                       </div>
                     )}
+                    <div className="flex justify-between">
+                      <span className="font-medium">Last Checked:</span>
+                      <span>
+                        {getTimeSinceLastCheck(getModelStatusInfo(selectedModels.ARCHITECT).last_checked_timestamp)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {healthError && (
+                <div className="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
+                  <div className="flex items-center space-x-2 text-xs text-red-300">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>{healthError}</span>
                   </div>
                 </div>
               )}
@@ -369,39 +543,60 @@ export function ControlPlane() {
                     <Badge variant={models[selectedModels.ARBITER]?.is_local ? 'secondary' : 'default'}>
                       {models[selectedModels.ARBITER]?.is_local ? 'LOCAL' : 'CLOUD'}
                     </Badge>
-                    <div className={`w-3 h-3 rounded-full ${getStatusColor(getModelStatusInfo(selectedModels.ARBITER).status)}`}>
-                      {getStatusIcon(getModelStatusInfo(selectedModels.ARBITER).status)}
+                    <div className={`w-3 h-3 rounded-full ${getStatusColor(
+                      getModelStatusInfo(selectedModels.ARBITER).status,
+                      getModelStatusInfo(selectedModels.ARBITER).latency
+                    )}`}>
+                      {getStatusIcon(
+                        getModelStatusInfo(selectedModels.ARBITER).status,
+                        getModelStatusInfo(selectedModels.ARBITER).latency
+                      )}
                     </div>
                   </>
                 )}
               </div>
             </CardHeader>
             <CardContent>
-              <Select
-                value={selectedModels.ARBITER}
-                onValueChange={(value) => handleModelChange('ARBITER', value)}
-              >
-                <SelectTrigger className="w-full bg-black/50 border-purple-500/50 text-purple-100 hover:bg-black/70">
-                  <SelectValue placeholder="Select Arbiter model" />
-                </SelectTrigger>
-                <SelectContent className="bg-black/80 border-purple-500/30 text-purple-100">
-                  {Object.entries(models).map(([modelId, model]) => (
-                    <SelectItem key={modelId} value={modelId}>
-                      <div className="flex items-center justify-between w-full">
-                        <span>{modelId}</span>
-                        <div className="flex items-center space-x-2">
-                          <Badge variant={model.is_local ? 'secondary' : 'default'}>
-                            {model.is_local ? 'LOCAL' : 'CLOUD'}
-                          </Badge>
-                          <div className={`w-4 h-4 rounded-full ${getStatusColor(getModelStatusInfo(modelId).status)}`}>
-                            {getStatusIcon(getModelStatusInfo(modelId).status)}
+              {isFetchingHealth && !healthMetrics[selectedModels.ARBITER || ''] ? (
+                <SkeletonDropdown />
+              ) : (
+                <Select
+                  value={selectedModels.ARBITER}
+                  onValueChange={(value) => handleModelChange('ARBITER', value)}
+                  disabled={isFetchingHealth}
+                >
+                  <SelectTrigger className="w-full bg-black/50 border-purple-500/50 text-purple-100 hover:bg-black/70">
+                    <SelectValue placeholder={isFetchingHealth ? "Loading models..." : "Select Arbiter model"} />
+                  </SelectTrigger>
+                  <SelectContent className="bg-black/80 border-purple-500/30 text-purple-100">
+                    {Object.entries(models).map(([modelId, model]) => {
+                      const statusInfo = getModelStatusInfo(modelId);
+                      return (
+                        <SelectItem key={modelId} value={modelId}>
+                          <div className="flex items-center justify-between w-full">
+                            <div className="flex items-center space-x-2">
+                              <span>{modelId}</span>
+                              {statusInfo.latency !== undefined && (
+                                <span className="text-xs text-gray-400">
+                                  {statusInfo.latency.toFixed(0)}ms
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Badge variant={model.is_local ? 'secondary' : 'default'}>
+                                {model.is_local ? 'LOCAL' : 'CLOUD'}
+                              </Badge>
+                              <div className={`w-4 h-4 rounded-full ${getStatusColor(statusInfo.status, statusInfo.latency)}`}>
+                                {getStatusIcon(statusInfo.status, statusInfo.latency)}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              )}
               {selectedModels.ARBITER && (
                 <div className="mt-4 p-3 bg-black/50 rounded-lg">
                   <div className="text-xs text-purple-200 space-y-2">
@@ -420,15 +615,32 @@ export function ControlPlane() {
                     <div className="flex justify-between">
                       <span className="font-medium">Status:</span>
                       <span className="capitalize">
-                        {getStatusText(getModelStatusInfo(selectedModels.ARBITER).status)}
+                        {getStatusText(
+                          getModelStatusInfo(selectedModels.ARBITER).status,
+                          getModelStatusInfo(selectedModels.ARBITER).latency
+                        )}
                       </span>
                     </div>
                     {getModelStatusInfo(selectedModels.ARBITER).latency !== undefined && (
                       <div className="flex justify-between">
                         <span className="font-medium">Latency:</span>
-                        <span>{getModelStatusInfo(selectedModels.ARBITER).latency?.toFixed(2)}s</span>
+                        <span>{getModelStatusInfo(selectedModels.ARBITER).latency.toFixed(0)}ms</span>
                       </div>
                     )}
+                    <div className="flex justify-between">
+                      <span className="font-medium">Last Checked:</span>
+                      <span>
+                        {getTimeSinceLastCheck(getModelStatusInfo(selectedModels.ARBITER).last_checked_timestamp)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {healthError && (
+                <div className="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
+                  <div className="flex items-center space-x-2 text-xs text-red-300">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>{healthError}</span>
                   </div>
                 </div>
               )}
@@ -448,39 +660,60 @@ export function ControlPlane() {
                     <Badge variant={models[selectedModels.JUDGE]?.is_local ? 'secondary' : 'default'}>
                       {models[selectedModels.JUDGE]?.is_local ? 'LOCAL' : 'CLOUD'}
                     </Badge>
-                    <div className={`w-3 h-3 rounded-full ${getStatusColor(getModelStatusInfo(selectedModels.JUDGE).status)}`}>
-                      {getStatusIcon(getModelStatusInfo(selectedModels.JUDGE).status)}
+                    <div className={`w-3 h-3 rounded-full ${getStatusColor(
+                      getModelStatusInfo(selectedModels.JUDGE).status,
+                      getModelStatusInfo(selectedModels.JUDGE).latency
+                    )}`}>
+                      {getStatusIcon(
+                        getModelStatusInfo(selectedModels.JUDGE).status,
+                        getModelStatusInfo(selectedModels.JUDGE).latency
+                      )}
                     </div>
                   </>
                 )}
               </div>
             </CardHeader>
             <CardContent>
-              <Select
-                value={selectedModels.JUDGE}
-                onValueChange={(value) => handleModelChange('JUDGE', value)}
-              >
-                <SelectTrigger className="w-full bg-black/50 border-blue-500/50 text-blue-100 hover:bg-black/70">
-                  <SelectValue placeholder="Select Judge model" />
-                </SelectTrigger>
-                <SelectContent className="bg-black/80 border-blue-500/30 text-blue-100">
-                  {Object.entries(models).map(([modelId, model]) => (
-                    <SelectItem key={modelId} value={modelId}>
-                      <div className="flex items-center justify-between w-full">
-                        <span>{modelId}</span>
-                        <div className="flex items-center space-x-2">
-                          <Badge variant={model.is_local ? 'secondary' : 'default'}>
-                            {model.is_local ? 'LOCAL' : 'CLOUD'}
-                          </Badge>
-                          <div className={`w-4 h-4 rounded-full ${getStatusColor(getModelStatusInfo(modelId).status)}`}>
-                            {getStatusIcon(getModelStatusInfo(modelId).status)}
+              {isFetchingHealth && !healthMetrics[selectedModels.JUDGE || ''] ? (
+                <SkeletonDropdown />
+              ) : (
+                <Select
+                  value={selectedModels.JUDGE}
+                  onValueChange={(value) => handleModelChange('JUDGE', value)}
+                  disabled={isFetchingHealth}
+                >
+                  <SelectTrigger className="w-full bg-black/50 border-blue-500/50 text-blue-100 hover:bg-black/70">
+                    <SelectValue placeholder={isFetchingHealth ? "Loading models..." : "Select Judge model"} />
+                  </SelectTrigger>
+                  <SelectContent className="bg-black/80 border-blue-500/30 text-blue-100">
+                    {Object.entries(models).map(([modelId, model]) => {
+                      const statusInfo = getModelStatusInfo(modelId);
+                      return (
+                        <SelectItem key={modelId} value={modelId}>
+                          <div className="flex items-center justify-between w-full">
+                            <div className="flex items-center space-x-2">
+                              <span>{modelId}</span>
+                              {statusInfo.latency !== undefined && (
+                                <span className="text-xs text-gray-400">
+                                  {statusInfo.latency.toFixed(0)}ms
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Badge variant={model.is_local ? 'secondary' : 'default'}>
+                                {model.is_local ? 'LOCAL' : 'CLOUD'}
+                              </Badge>
+                              <div className={`w-4 h-4 rounded-full ${getStatusColor(statusInfo.status, statusInfo.latency)}`}>
+                                {getStatusIcon(statusInfo.status, statusInfo.latency)}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              )}
               {selectedModels.JUDGE && (
                 <div className="mt-4 p-3 bg-black/50 rounded-lg">
                   <div className="text-xs text-blue-200 space-y-2">
@@ -499,15 +732,32 @@ export function ControlPlane() {
                     <div className="flex justify-between">
                       <span className="font-medium">Status:</span>
                       <span className="capitalize">
-                        {getStatusText(getModelStatusInfo(selectedModels.JUDGE).status)}
+                        {getStatusText(
+                          getModelStatusInfo(selectedModels.JUDGE).status,
+                          getModelStatusInfo(selectedModels.JUDGE).latency
+                        )}
                       </span>
                     </div>
                     {getModelStatusInfo(selectedModels.JUDGE).latency !== undefined && (
                       <div className="flex justify-between">
                         <span className="font-medium">Latency:</span>
-                        <span>{getModelStatusInfo(selectedModels.JUDGE).latency?.toFixed(2)}s</span>
+                        <span>{getModelStatusInfo(selectedModels.JUDGE).latency.toFixed(0)}ms</span>
                       </div>
                     )}
+                    <div className="flex justify-between">
+                      <span className="font-medium">Last Checked:</span>
+                      <span>
+                        {getTimeSinceLastCheck(getModelStatusInfo(selectedModels.JUDGE).last_checked_timestamp)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {healthError && (
+                <div className="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
+                  <div className="flex items-center space-x-2 text-xs text-red-300">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>{healthError}</span>
                   </div>
                 </div>
               )}
@@ -519,13 +769,18 @@ export function ControlPlane() {
         <div className="flex justify-end">
           <Button
             onClick={handleApplyConfig}
-            disabled={isApplying}
-            className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:shadow-cyan-500/50 transition-all duration-200 transform hover:scale-105 text-lg"
+            disabled={isApplying || isFetchingHealth}
+            className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:shadow-cyan-500/50 transition-all duration-200 transform hover:scale-105 text-lg disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isApplying ? (
               <>
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                 DEPLOYING...
+              </>
+            ) : isFetchingHealth ? (
+              <>
+                <Clock className="mr-2 h-5 w-5 animate-spin" />
+                LOADING HEALTH DATA...
               </>
             ) : (
               <>
@@ -555,8 +810,8 @@ export function ControlPlane() {
                       <Badge variant={model.is_local ? 'secondary' : 'default'}>
                         {model.is_local ? 'LOCAL' : 'CLOUD'}
                       </Badge>
-                      <div className={`w-4 h-4 rounded-full ${getStatusColor(statusInfo.status)}`}>
-                        {getStatusIcon(statusInfo.status)}
+                      <div className={`w-4 h-4 rounded-full ${getStatusColor(statusInfo.status, statusInfo.latency)}`}>
+                        {getStatusIcon(statusInfo.status, statusInfo.latency)}
                       </div>
                     </div>
                   </CardHeader>
@@ -574,15 +829,28 @@ export function ControlPlane() {
                         <span className="font-medium">Speed:</span>
                         <span>{model.speed_rating}/10</span>
                       </div>
-                      {statusInfo.latency !== undefined && (
+                      {statusInfo.latency !== undefined ? (
                         <div className="flex justify-between">
                           <span className="font-medium">Latency:</span>
-                          <span>{statusInfo.latency.toFixed(2)}s</span>
+                          <span>{statusInfo.latency.toFixed(0)}ms</span>
+                        </div>
+                      ) : (
+                        <div className="flex justify-between">
+                          <span className="font-medium">Latency:</span>
+                          <span className="text-gray-500">Not available</span>
                         </div>
                       )}
                       <div className="flex justify-between">
                         <span className="font-medium">Status:</span>
-                        <span className="capitalize">{getStatusText(statusInfo.status)}</span>
+                        <span className="capitalize">
+                          {getStatusText(statusInfo.status, statusInfo.latency)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">Last Checked:</span>
+                        <span>
+                          {getTimeSinceLastCheck(statusInfo.last_checked_timestamp)}
+                        </span>
                       </div>
                     </div>
                   </CardContent>
