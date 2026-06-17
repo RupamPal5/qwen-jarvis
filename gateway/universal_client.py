@@ -164,6 +164,14 @@ class UniversalClient:
         """
         return await self.connection_pool.get_client(provider)
 
+    async def initialize(self) -> None:
+        """Initialize the universal client with any required setup.
+
+        This can be called to start background tasks.
+        """
+        # Start periodic metrics collection
+        asyncio.create_task(self._periodic_metrics_collection())
+
     async def close(self) -> None:
         """Close all HTTP clients and clean up resources.
 

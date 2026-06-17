@@ -749,7 +749,8 @@ class ConsensusEngineV2:
                 "avg_latency": 0.0,
                 "avg_tokens": 0.0,
                 "last_called": None,
-                "error_rate": 0.0
+                "error_rate": 0.0,
+                "cache_hits": 0  # Track cache hits
             }
 
         stats = self.model_performance[model_id]
@@ -765,8 +766,28 @@ class ConsensusEngineV2:
         if stats["total_calls"] > 0:
             stats["error_rate"] = stats["failed_calls"] / stats["total_calls"]
 
-        if tokens_used is not None:
+        if tokens_used is not None and stats["total_calls"] > 0:
             stats["avg_tokens"] = stats["total_tokens"] / stats["total_calls"]
+
+    def _track_cached_response(self) -> None:
+        """Track a cached response for performance monitoring."""
+        # Track cache hits in a special "cache" model entry
+        if "cache" not in self.model_performance:
+            self.model_performance["cache"] = {
+                "total_calls": 0,
+                "cache_hits": 0,
+                "avg_latency": 0.0
+            }
+
+        stats = self.model_performance["cache"]
+        stats["total_calls"] += 1
+        stats["cache_hits"] += 1
+
+        # Update average latency (very low for cached responses)
+        # We'll use a small value to represent cache latency
+        cache_latency = 0.001  # 1ms for cache access
+        stats["total_latency"] = stats.get("total_latency", 0.0) + cache_latency
+        stats["avg_latency"] = stats["total_latency"] / stats["total_calls"]
 
     def _get_performance_metrics(self) -> Dict[str, Any]:
         """Get performance metrics for all models.
