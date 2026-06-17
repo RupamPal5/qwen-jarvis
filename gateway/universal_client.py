@@ -9,6 +9,7 @@ import os
 from datetime import datetime, timedelta
 from enum import Enum
 from core.error_handler import get_error_handler
+from gateway.connection_pool import get_connection_pool
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,7 @@ class UniversalClient:
 
     def __init__(self):
         """Initialize the universal client with default settings."""
-        self.clients: Dict[str, httpx.AsyncClient] = {}
+        self.connection_pool = get_connection_pool()
         self.timeouts = {
             "ollama": 30.0,
             "openrouter": 60.0,
@@ -151,23 +152,15 @@ class UniversalClient:
         self.error_handler = get_error_handler()
 
     async def get_client(self, provider: str) -> httpx.AsyncClient:
-        """Get or create an HTTP client for a provider.
+        """Get an HTTP client from the connection pool for a provider.
 
         Args:
             provider: The provider name
 
         Returns:
-            httpx.AsyncClient: Configured HTTP client for the provider
+            httpx.AsyncClient: A client from the connection pool
         """
-        if provider not in self.clients:
-            try:
-                self.clients[provider] = httpx.AsyncClient(
-                    timeout=self.timeouts.get(provider, 30.0)
-                )
-            except Exception as e:
-                logger.error(f"Failed to create HTTP client for provider {provider}: {str(e)}")
-                raise
-        return self.clients[provider]
+        return await self.connection_pool.get_client(provider)
 
     async def close(self) -> None:
         """Close all HTTP clients and clean up resources.
@@ -175,12 +168,7 @@ class UniversalClient:
         This should be called when the application is shutting down.
         """
         try:
-            for provider, client in self.clients.items():
-                try:
-                    await client.aclose()
-                except Exception as e:
-                    logger.error(f"Error closing client for provider {provider}: {str(e)}")
-            self.clients = {}
+            await self.connection_pool.close_all()
         except Exception as e:
             logger.error(f"Error during client cleanup: {str(e)}")
             raise
@@ -458,7 +446,7 @@ class UniversalClient:
         if not circuit_breaker.is_call_allowed():
             raise Exception(f"Circuit breaker is OPEN for provider {model.provider}")
 
-        client = await self.get_client(model.provider)
+        async with self.connection_pool.acquire(model.provider) as client:
 
         try:
             start_time = time.time()

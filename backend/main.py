@@ -97,6 +97,43 @@ app.add_middleware(
     allowed_hosts=["localhost", "127.0.0.1"]
 )
 
+# Configure request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all incoming requests with structured logging."""
+    from core.logger import get_logger_manager
+    logger_manager = get_logger_manager()
+
+    start_time = time.time()
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent")
+
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        duration = time.time() - start_time
+        logger_manager.log_api_request(
+            endpoint=request.url.path,
+            method=request.method,
+            status_code=500,
+            duration=duration,
+            client_ip=client_ip,
+            user_agent=user_agent
+        )
+        raise
+
+    duration = time.time() - start_time
+    logger_manager.log_api_request(
+        endpoint=request.url.path,
+        method=request.method,
+        status_code=response.status_code,
+        duration=duration,
+        client_ip=client_ip,
+        user_agent=user_agent
+    )
+
+    return response
+
 # Configure request size limit and validation
 @app.middleware("http")
 async def limit_request_size(request: Request, call_next):
@@ -161,6 +198,11 @@ async def startup_event():
     error_handler = get_error_handler()
     error_handler.setup_global_exception_handling()
 
+    # Initialize logger manager
+    from core.logger import get_logger_manager
+    logger_manager = get_logger_manager()
+    logger.info("Logger manager initialized")
+
     # Run preflight checks before starting services
     from core.preflight import run_preflight_checks
     preflight_passed = await run_preflight_checks()
@@ -175,6 +217,9 @@ async def startup_event():
 
     # Start health monitoring
     from core.health_monitor import get_health_monitor
+    from core.logger import get_logger_manager
+    import psutil
+    import time
     health_monitor = await get_health_monitor()
     await health_monitor.start_monitoring()
 

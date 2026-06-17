@@ -243,6 +243,108 @@ async def get_error_stats(request: Request) -> Dict:
         logger.error(f"Failed to get error stats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get error stats: {str(e)}")
 
+@router.get("/metrics")
+async def get_metrics(request: Request) -> Dict:
+    """Get system metrics and performance statistics"""
+    # Only allow this from localhost for security
+    client_ip = request.client.host if request.client else "unknown"
+    if client_ip not in ["127.0.0.1", "::1", "localhost"]:
+        raise HTTPException(status_code=403, detail="This endpoint is only available from localhost")
+
+    try:
+        # Get system metrics
+        system_metrics = get_system_metrics()
+
+        # Get model registry
+        model_registry = get_model_registry()
+
+        # Get consensus engine
+        consensus_engine = await get_consensus_engine()
+
+        # Get network manager
+        network_manager = await get_network_manager()
+
+        # Get health monitor
+        health_monitor = await get_health_monitor()
+
+        # Get health report
+        health_report = health_monitor.get_health_report(1)  # Last 1 hour
+
+        # Get model performance metrics
+        model_performance = consensus_engine._get_performance_metrics()
+
+        # Get active models count
+        active_models = len(model_registry.get_active_models())
+
+        return {
+            "status": "success",
+            "system": system_metrics,
+            "models": {
+                "total": len(model_registry.models),
+                "active": active_models,
+                "local": len(model_registry.get_local_models()),
+                "cloud": len(model_registry.get_cloud_models())
+            },
+            "performance": {
+                "model_performance": model_performance,
+                "health_report": health_report
+            },
+            "uptime": time.time() - START_TIME
+        }
+    except Exception as e:
+        logger.error(f"Failed to get metrics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get metrics: {str(e)}")
+
+def get_system_metrics() -> Dict:
+    """Get system-level metrics like CPU, memory, etc."""
+    try:
+        # CPU usage
+        cpu_percent = psutil.cpu_percent(interval=1)
+        cpu_count = psutil.cpu_count()
+
+        # Memory usage
+        memory = psutil.virtual_memory()
+        memory_used_gb = round(memory.used / (1024 ** 3), 2)
+        memory_total_gb = round(memory.total / (1024 ** 3), 2)
+        memory_percent = memory.percent
+
+        # Disk usage
+        disk = psutil.disk_usage('/')
+        disk_used_gb = round(disk.used / (1024 ** 3), 2)
+        disk_total_gb = round(disk.total / (1024 ** 3), 2)
+        disk_percent = disk.percent
+
+        # Network
+        net_io = psutil.net_io_counters()
+        bytes_sent_mb = round(net_io.bytes_sent / (1024 ** 2), 2)
+        bytes_recv_mb = round(net_io.bytes_recv / (1024 ** 2), 2)
+
+        return {
+            "cpu": {
+                "usage_percent": cpu_percent,
+                "count": cpu_count
+            },
+            "memory": {
+                "used_gb": memory_used_gb,
+                "total_gb": memory_total_gb,
+                "usage_percent": memory_percent
+            },
+            "disk": {
+                "used_gb": disk_used_gb,
+                "total_gb": disk_total_gb,
+                "usage_percent": disk_percent
+            },
+            "network": {
+                "bytes_sent_mb": bytes_sent_mb,
+                "bytes_recv_mb": bytes_recv_mb
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to get system metrics: {str(e)}")
+        return {
+            "error": str(e)
+        }
+
 @router.get("/encryption/generate-key")
 async def generate_encryption_key(request: Request) -> Dict:
     """Generate a new encryption key for API keys.

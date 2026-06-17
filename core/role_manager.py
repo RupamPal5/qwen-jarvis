@@ -2,6 +2,7 @@ import logging
 from typing import Dict, Optional
 from models.registry import ModelEntry, get_model_registry
 from pydantic import BaseModel
+from core.logger import get_logger_manager
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,8 @@ class RoleManager:
 
     def assign_role(self, role: str, model_id: str) -> bool:
         """Assign a model to a role"""
+        previous_model = self.roles.get(role)
+
         if role not in self.roles:
             logger.error(f"Invalid role: {role}")
             return False
@@ -36,6 +39,11 @@ class RoleManager:
 
         self.roles[role] = model_id
         logger.info(f"Assigned {model_id} to role {role}")
+
+        # Log the assignment event
+        logger_manager = get_logger_manager()
+        logger_manager.log_model_assignment(role, model_id, previous_model)
+
         return True
 
     def get_assigned_model(self, role: str) -> Optional[ModelEntry]:

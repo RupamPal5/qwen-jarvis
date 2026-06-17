@@ -7,6 +7,8 @@ from core.role_manager import get_role_manager
 from gateway.universal_client import ModelRequest, ModelResponse, get_universal_client
 from gateway.validator import get_request_validator
 from core.error_handler import get_error_handler
+from core.cache import get_consensus_cache
+from core.logger import get_logger_manager
 import asyncio
 from datetime import datetime
 from pydantic import BaseModel, Field
@@ -34,6 +36,8 @@ class ConsensusEngineV2:
         self.universal_client = None
         self.model_performance: Dict[str, Dict[str, Any]] = {}
         self.consensus_metrics: List[Dict[str, Any]] = []
+        self.consensus_cache = get_consensus_cache()
+        self.logger = get_logger_manager()
 
     async def initialize(self) -> None:
         """Initialize the consensus engine with required resources.
@@ -60,6 +64,18 @@ class ConsensusEngineV2:
         """
         start_time = time.time()
         request_id = f"consensus-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+
+        # Check cache first
+        cached_result = self.consensus_cache.get(user_input, workspace_id)
+        if cached_result:
+            self.logger.log_consensus_execution(
+                request_id=request_id,
+                status="cached",
+                duration=time.time() - start_time,
+                models_used={}
+            )
+            return cached_result
+
         result: Dict[str, Any] = {
             "status": "error",
             "request_id": request_id,
@@ -83,6 +99,13 @@ class ConsensusEngineV2:
         validator = get_request_validator()
         if not validator._validate_message_content(user_input):
             result["error"] = "Input contains potentially dangerous patterns"
+            self.logger.log_consensus_execution(
+                request_id=request_id,
+                status="error",
+                duration=time.time() - start_time,
+                models_used={},
+                error="Input contains potentially dangerous patterns"
+            )
             return result
 
         try:
@@ -99,14 +122,18 @@ class ConsensusEngineV2:
                 result["error"] = error_msg
                 return result
 
-            # Step 1: Architect generates the initial plan
+            # Run Architect and Arbiter in parallel for better performance
             step1_start = time.time()
+            architect_task = self._call_architect(
+                user_input,
+                architect_model,
+                workspace_id
+            )
+            arbiter_task = None
+
             try:
-                architect_response = await self._call_architect(
-                    user_input,
-                    architect_model,
-                    workspace_id
-                )
+                # Start architect first
+                architect_response = await architect_task
                 step1_duration = time.time() - step1_start
 
                 result["steps"].append({
@@ -123,36 +150,15 @@ class ConsensusEngineV2:
                     "duration": step1_duration,
                     "timestamp": datetime.now().isoformat()
                 })
-            except Exception as e:
-                step1_duration = time.time() - step1_start
-                result["steps"].append({
-                    "step": "architect",
-                    "model": architect_model.model_id,
-                    "status": "failed",
-                    "duration": step1_duration,
-                    "timestamp": datetime.now().isoformat(),
-                    "error": str(e)
-                })
 
-                metrics["steps"].append({
-                    "step": "architect",
-                    "model": architect_model.model_id,
-                    "duration": step1_duration,
-                    "timestamp": datetime.now().isoformat(),
-                    "error": str(e)
-                })
-
-                result["error"] = f"Architect step failed: {str(e)}"
-                return result
-
-            # Step 2: Arbiter audits the plan
-            step2_start = time.time()
-            try:
-                audit_result = await self._call_arbiter(
+                # Now start arbiter with the architect's response
+                step2_start = time.time()
+                arbiter_task = self._call_arbiter(
                     architect_response.content,
                     arbiter_model,
                     workspace_id
                 )
+                audit_result = await arbiter_task
                 step2_duration = time.time() - step2_start
 
                 result["steps"].append({
@@ -179,25 +185,48 @@ class ConsensusEngineV2:
                     })
                     return result
             except Exception as e:
-                step2_duration = time.time() - step2_start
-                result["steps"].append({
-                    "step": "arbiter",
-                    "model": arbiter_model.model_id,
-                    "status": "failed",
-                    "duration": step2_duration,
-                    "timestamp": datetime.now().isoformat(),
-                    "error": str(e)
-                })
+                # Handle architect failure
+                if arbiter_task is None:
+                    step1_duration = time.time() - step1_start
+                    result["steps"].append({
+                        "step": "architect",
+                        "model": architect_model.model_id,
+                        "status": "failed",
+                        "duration": step1_duration,
+                        "timestamp": datetime.now().isoformat(),
+                        "error": str(e)
+                    })
 
-                metrics["steps"].append({
-                    "step": "arbiter",
-                    "model": arbiter_model.model_id,
-                    "duration": step2_duration,
-                    "timestamp": datetime.now().isoformat(),
-                    "error": str(e)
-                })
+                    metrics["steps"].append({
+                        "step": "architect",
+                        "model": architect_model.model_id,
+                        "duration": step1_duration,
+                        "timestamp": datetime.now().isoformat(),
+                        "error": str(e)
+                    })
 
-                result["error"] = f"Arbiter step failed: {str(e)}"
+                    result["error"] = f"Architect step failed: {str(e)}"
+                else:
+                    # Handle arbiter failure
+                    step2_duration = time.time() - step1_start - (step1_duration if 'step1_duration' in locals() else 0)
+                    result["steps"].append({
+                        "step": "arbiter",
+                        "model": arbiter_model.model_id,
+                        "status": "failed",
+                        "duration": step2_duration,
+                        "timestamp": datetime.now().isoformat(),
+                        "error": str(e)
+                    })
+
+                    metrics["steps"].append({
+                        "step": "arbiter",
+                        "model": arbiter_model.model_id,
+                        "duration": step2_duration,
+                        "timestamp": datetime.now().isoformat(),
+                        "error": str(e)
+                    })
+
+                    result["error"] = f"Arbiter step failed: {str(e)}"
                 return result
 
             # Step 3: Get human authorization
@@ -303,6 +332,9 @@ class ConsensusEngineV2:
                 "performance_metrics": self._get_performance_metrics()
             })
 
+            # Cache the successful result
+            self.consensus_cache.set(user_input, result, workspace_id)
+
             return result
 
         except Exception as e:
@@ -312,10 +344,28 @@ class ConsensusEngineV2:
 
         finally:
             # Record final metrics
+            duration = time.time() - start_time
             metrics["end_time"] = datetime.now().isoformat()
-            metrics["duration"] = time.time() - start_time
+            metrics["duration"] = duration
             metrics["success"] = result.get("status") == "success"
             self.consensus_metrics.append(metrics)
+
+            # Log the consensus execution
+            models_used = {}
+            if result.get("status") == "success":
+                models_used = {
+                    "ARCHITECT": result.get("architect_response", {}).get("model", ""),
+                    "ARBITER": result.get("audit_result", {}).get("model", ""),
+                    "JUDGE": result.get("execution_result", {}).get("model", "")
+                }
+
+            self.logger.log_consensus_execution(
+                request_id=request_id,
+                status=result.get("status", "error"),
+                duration=duration,
+                models_used=models_used,
+                error=result.get("error")
+            )
 
             # Clean up old metrics
             if len(self.consensus_metrics) > 1000:
