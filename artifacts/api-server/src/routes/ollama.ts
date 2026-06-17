@@ -1,17 +1,29 @@
-import { Router } from "express";
+import { Router, Multer } from "express";
 import { createClient } from 'indexeddb-client';
+import multer from 'multer';
 
 const router = Router();
 
 const OLLAMA_BASE = process.env["OLLAMA_URL"]?? "http://localhost:11434";
 const db = await createClient('ollama-db');
+const upload = multer({ dest: './uploads/' });
 
 async function ollamaFetch(path: string, options?: RequestInit) {
   const res = await fetch(`${OLLAMA_BASE}${path}`, options);
   return res;
 }
 
-router.get("/ollama/models", async (_req, res) => {
+router.post("/api/v1/sensory/ingestion", upload.array('files', 12), async (req, res) => {
+  try {
+    const files = req.files as Express.Multer.File[];
+    for (const file of files) {
+      await db.put('files', file.buffer);
+    }
+    res.json({ message: 'Files uploaded successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to upload files' });
+  }
+}
   try {
     const r = await ollamaFetch("/api/tags");
     if (!r.ok) { res.status(502).json({ error: "Ollama unreachable" }); return; }
@@ -101,7 +113,18 @@ router.post("/ollama/chat", async (req, res) => {
   }
 });
 
-router.post("/ollama/generate", async (req, res) => {
+router.post("/api/v1/sensory/ingestion/video", upload.single('video'), async (req, res) => {
+  try {
+    const video = req.file as Express.Multer.File;
+    const frames = await extractFramesFromVideo(video.buffer);
+    for (const frame of frames) {
+      await db.put('frames', frame);
+    }
+    res.json({ message: 'Video frames extracted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to extract video frames' });
+  }
+}
   const { model, prompt, stream } = req.body as { model: string; prompt: string; stream?: boolean };
   if (!model ||!prompt) { res.status(400).json({ error: "model and prompt required" }); return; }
 
