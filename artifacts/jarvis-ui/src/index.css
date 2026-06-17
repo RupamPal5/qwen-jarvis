@@ -9,6 +9,10 @@
     -webkit-tap-highlight-color: transparent;
     --border: 222.2 84% 4.9%;
   }
+
+  * {
+    @apply border-border;
+  }
 }
 
 @theme inline {

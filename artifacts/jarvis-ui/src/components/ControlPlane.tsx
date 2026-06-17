@@ -85,7 +85,6 @@ export function ControlPlane() {
   };
   */
 
-  const [ws, setWs] = useState<WebSocket | null>(null);
   const [activePreset, setActivePreset] = useState<string>('');
   const [presetDropdownOpen, setPresetDropdownOpen] = useState(false);
 
