@@ -594,18 +594,6 @@ _model_registry = ModelRegistry()
 
 def get_model_registry() -> ModelRegistry:
     return _model_registry
-import yaml
-from pathlib import Path
-from typing import Dict, List, Optional, Union
-from pydantic import BaseModel, Field
-import logging
-
-logger = logging.getLogger(__name__)
-
-class ModelEntry(BaseModel):
-    model_id: str = Field(..., description="Unique identifier for the model")
-    provider: str = Field(..., description="Provider type: ollama, openrouter, gemini, mistral, etc.")
-    model_name: str = Field(..., description="Actual model name/identifier")
     api_key: Optional[str] = Field(None, description="API key if required")
     endpoint: Optional[str] = Field(None, description="API endpoint URL")
     context_window: int = Field(..., description="Context window in tokens")
