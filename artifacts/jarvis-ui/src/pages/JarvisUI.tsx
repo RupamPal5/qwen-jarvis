@@ -537,6 +537,15 @@ export default function JarvisUI() {
     };
   }, [initializePersistence, notificationSystem, reconnectWebSocket]);
 
+  const { messages, addMessage, setTheme, systemStatus, setSystemStatus, setAudioAmplitude, ollamaOnline, ollamaModelCount } = useStore();
+  const theme = useStore(state => state.theme);
+
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const maxReconnectAttempts = 5;
+  const folderNameInputRef = useRef<HTMLInputElement>(null);
+
   // Apply theme on mount and when it changes
   useEffect(() => {
     applyTheme(theme);
@@ -549,11 +558,6 @@ export default function JarvisUI() {
       folderNameInputRef.current.select();
     }
   }, [folderEditMode]);
-
-  // Sync activeView with activePanel from store
-  useEffect(() => {
-    setActiveView(activePanel);
-  }, [activePanel]);
 
   // Sync activeView with activePanel from store
   useEffect(() => {
