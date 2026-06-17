@@ -1,10 +1,11 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
+import logging
+import asyncio
+from typing import Dict, Optional, List, Any
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from typing import Dict, Optional, List
+from fastapi.staticfiles import StaticFiles
 import json
-import asyncio
-import logging
 import re
 import subprocess
 from pathlib import Path
@@ -15,8 +16,20 @@ from core.network_manager import get_network_manager
 from security.protocol import get_security_protocol
 from routes import router as api_router
 from pydantic import BaseModel
+from datetime import datetime
+import os
 
 logger = logging.getLogger(__name__)
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('logs/backend.log'),
+        logging.StreamHandler()
+    ]
+)
 
 app = FastAPI(
     title="JARVIS V5.0 Universal Multi-Model Orchestration System",
@@ -40,29 +53,89 @@ consensus_engine = None
 network_manager = None
 security_protocol = get_security_protocol()
 
-# Configure upload directory
+# Ensure logs directory exists
+os.makedirs("logs", exist_ok=True)
+
+# Configure directories
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+LOGS_DIR = Path("logs")
+LOGS_DIR.mkdir(exist_ok=True)
+
+async def initialize_services() -> None:
+    """Initialize all core services."""
+    global consensus_engine, network_manager
+
+    try:
+        logger.info("Initializing core services...")
+
+        # Initialize consensus engine
+        consensus_engine = await get_consensus_engine()
+
+        # Initialize network manager
+        network_manager = await get_network_manager()
+
+        # Load audit log
+        security_protocol.load_audit_log()
+
+        logger.info("Core services initialized successfully")
+
+    except Exception as e:
+        logger.critical(f"Failed to initialize core services: {str(e)}", exc_info=True)
+        raise
 
 # Initialize async components
 @app.on_event("startup")
 async def startup_event():
-    global consensus_engine, network_manager
-    consensus_engine = await get_consensus_engine()
-    network_manager = await get_network_manager()
+    # Run preflight checks before starting services
+    from core.preflight import run_preflight_checks
+    preflight_passed = await run_preflight_checks()
+
+    if not preflight_passed:
+        logger.critical("Preflight checks failed. Shutting down...")
+        # Give some time for the critical log message to be written
+        await asyncio.sleep(2)
+        sys.exit(1)
+
+    await initialize_services()
+
+    # Start health monitoring
+    from core.health_monitor import get_health_monitor
+    health_monitor = await get_health_monitor()
+    await health_monitor.start_monitoring()
 
 class ConnectionManager:
+    """Manages WebSocket connections and subscriptions."""
+
     def __init__(self):
+        """Initialize the connection manager."""
         self.active_connections: Dict[str, WebSocket] = {}
         self.model_status_subscribers: Dict[str, List[str]] = {}
+        self.connection_metrics: List[Dict[str, Any]] = []
 
-    async def connect(self, websocket: WebSocket, client_id: str):
+    async def connect(self, websocket: WebSocket, client_id: str) -> None:
+        """Accept a new WebSocket connection.
+
+        Args:
+            websocket: The WebSocket connection
+            client_id: Unique identifier for the client
+        """
         await websocket.accept()
         self.active_connections[client_id] = websocket
+        self._record_connection_event(client_id, "connect")
+        logger.info(f"Client connected: {client_id}")
 
-    def disconnect(self, client_id: str):
+    def disconnect(self, client_id: str) -> None:
+        """Disconnect a client and clean up subscriptions.
+
+        Args:
+            client_id: Unique identifier for the client
+        """
         if client_id in self.active_connections:
             del self.active_connections[client_id]
+            self._record_connection_event(client_id, "disconnect")
+            logger.info(f"Client disconnected: {client_id}")
 
         # Remove from any model status subscriptions
         for model_id, subscribers in list(self.model_status_subscribers.items()):
@@ -71,41 +144,140 @@ class ConnectionManager:
                 if not subscribers:
                     del self.model_status_subscribers[model_id]
 
-    async def send_personal_message(self, message: dict, client_id: str):
-        if client_id in self.active_connections:
-            await self.active_connections[client_id].send_json(message)
+    async def send_personal_message(self, message: dict, client_id: str) -> bool:
+        """Send a message to a specific client.
 
-    async def subscribe_to_model_status(self, model_id: str, client_id: str):
+        Args:
+            message: The message to send
+            client_id: Unique identifier for the client
+
+        Returns:
+            bool: True if message was sent successfully, False otherwise
+        """
+        if client_id not in self.active_connections:
+            logger.warning(f"Attempted to send message to non-existent client: {client_id}")
+            return False
+
+        try:
+            await self.active_connections[client_id].send_json(message)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send message to client {client_id}: {str(e)}")
+            self.disconnect(client_id)
+            return False
+
+    async def subscribe_to_model_status(self, model_id: str, client_id: str) -> None:
+        """Subscribe a client to model status updates.
+
+        Args:
+            model_id: The model ID to subscribe to
+            client_id: Unique identifier for the client
+        """
         if model_id not in self.model_status_subscribers:
             self.model_status_subscribers[model_id] = []
 
         if client_id not in self.model_status_subscribers[model_id]:
             self.model_status_subscribers[model_id].append(client_id)
+            logger.debug(f"Client {client_id} subscribed to model {model_id} status updates")
 
-    async def unsubscribe_from_model_status(self, model_id: str, client_id: str):
+    async def unsubscribe_from_model_status(self, model_id: str, client_id: str) -> None:
+        """Unsubscribe a client from model status updates.
+
+        Args:
+            model_id: The model ID to unsubscribe from
+            client_id: Unique identifier for the client
+        """
         if model_id in self.model_status_subscribers and client_id in self.model_status_subscribers[model_id]:
             self.model_status_subscribers[model_id].remove(client_id)
+            logger.debug(f"Client {client_id} unsubscribed from model {model_id} status updates")
             if not self.model_status_subscribers[model_id]:
                 del self.model_status_subscribers[model_id]
 
-    async def broadcast_model_status(self, model_id: str, status: dict):
-        if model_id in self.model_status_subscribers:
-            for client_id in self.model_status_subscribers[model_id]:
-                await self.send_personal_message({
-                    "type": "model_status_update",
-                    "model_id": model_id,
-                    "status": status
-                }, client_id)
+    async def broadcast_model_status(self, model_id: str, status: dict) -> int:
+        """Broadcast model status to all subscribed clients.
 
-    async def broadcast_to_all(self, message: dict):
-        """Broadcast a message to all connected clients"""
-        for websocket in self.active_connections.values():
-            await websocket.send_json(message)
+        Args:
+            model_id: The model ID
+            status: The status information to broadcast
+
+        Returns:
+            int: Number of clients that received the message
+        """
+        if model_id not in self.model_status_subscribers:
+            return 0
+
+        message = {
+            "type": "model_status_update",
+            "model_id": model_id,
+            "status": status,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        sent_count = 0
+        for client_id in self.model_status_subscribers[model_id]:
+            success = await self.send_personal_message(message, client_id)
+            if success:
+                sent_count += 1
+
+        logger.debug(f"Broadcast model {model_id} status to {sent_count} clients")
+        return sent_count
+
+    async def broadcast_to_all(self, message: dict) -> int:
+        """Broadcast a message to all connected clients.
+
+        Args:
+            message: The message to broadcast
+
+        Returns:
+            int: Number of clients that received the message
+        """
+        message["timestamp"] = datetime.now().isoformat()
+        sent_count = 0
+
+        for client_id, websocket in list(self.active_connections.items()):
+            success = await self.send_personal_message(message, client_id)
+            if success:
+                sent_count += 1
+
+        logger.debug(f"Broadcast message to {sent_count} clients")
+        return sent_count
+
+    def _record_connection_event(self, client_id: str, event_type: str) -> None:
+        """Record connection metrics.
+
+        Args:
+            client_id: Unique identifier for the client
+            event_type: Type of event (connect/disconnect)
+        """
+        metric = {
+            "client_id": client_id,
+            "event_type": event_type,
+            "timestamp": datetime.now().isoformat(),
+            "active_connections": len(self.active_connections)
+        }
+
+        self.connection_metrics.append(metric)
+
+        # Clean up old metrics
+        if len(self.connection_metrics) > 1000:
+            self.connection_metrics = self.connection_metrics[-1000:]
 
 class ModelConfigRequest(BaseModel):
+    """Request to configure the tri-node architecture models."""
+
     architect: str
     arbiter: str
     judge: str
+
+    class Config:
+        """Pydantic configuration."""
+        json_schema_extra = {
+            "example": {
+                "architect": "qwen2.5-coder:7b",
+                "arbiter": "gemini-2.5-flash",
+                "judge": "llama-3.3-70b"
+            }
+        }
 
 # Include API routes
 app.include_router(api_router, prefix="/api")

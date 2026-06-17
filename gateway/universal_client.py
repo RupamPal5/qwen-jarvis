@@ -1,30 +1,70 @@
 import httpx
 import logging
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, Any, List
 from models.registry import ModelEntry
 from pydantic import BaseModel
 import time
 import asyncio
+import os
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 class ModelRequest(BaseModel):
+    """Represents a request to be sent to a model."""
+
     model: str
-    messages: list
+    messages: List[Dict[str, Any]]
     stream: bool = False
     temperature: float = 0.7
     max_tokens: Optional[int] = None
 
+    class Config:
+        """Pydantic configuration."""
+        json_schema_extra = {
+            "example": {
+                "model": "qwen2.5-coder:7b",
+                "messages": [
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": "Hello, how are you?"}
+                ],
+                "stream": False,
+                "temperature": 0.7
+            }
+        }
+
 class ModelResponse(BaseModel):
+    """Represents a response from a model."""
+
     content: str
     model: str
     provider: str
     latency: float
     tokens_used: Optional[int] = None
+    timestamp: datetime = Field(default_factory=datetime.now)
+    success: bool = True
+    error_message: Optional[str] = None
+
+    class Config:
+        """Pydantic configuration."""
+        json_schema_extra = {
+            "example": {
+                "content": "I'm doing well, thank you for asking!",
+                "model": "qwen2.5-coder:7b",
+                "provider": "ollama",
+                "latency": 0.45,
+                "tokens_used": 15,
+                "timestamp": "2023-11-15T12:34:56.789Z",
+                "success": True
+            }
+        }
 
 class UniversalClient:
+    """Universal client for calling different model providers with consistent interface."""
+
     def __init__(self):
-        self.clients = {}
+        """Initialize the universal client with default settings."""
+        self.clients: Dict[str, httpx.AsyncClient] = {}
         self.timeouts = {
             "ollama": 30.0,
             "openrouter": 60.0,
@@ -34,69 +74,188 @@ class UniversalClient:
         }
         self.max_retries = 3
         self.retry_delay = 1.0
+        self.request_metrics: List[Dict[str, Any]] = []
 
     async def get_client(self, provider: str) -> httpx.AsyncClient:
-        """Get or create an HTTP client for a provider"""
+        """Get or create an HTTP client for a provider.
+
+        Args:
+            provider: The provider name
+
+        Returns:
+            httpx.AsyncClient: Configured HTTP client for the provider
+        """
         if provider not in self.clients:
-            self.clients[provider] = httpx.AsyncClient(
-                timeout=self.timeouts.get(provider, 30.0)
-            )
+            try:
+                self.clients[provider] = httpx.AsyncClient(
+                    timeout=self.timeouts.get(provider, 30.0)
+                )
+            except Exception as e:
+                logger.error(f"Failed to create HTTP client for provider {provider}: {str(e)}")
+                raise
         return self.clients[provider]
 
-    async def close(self):
-        """Close all HTTP clients"""
-        for client in self.clients.values():
-            await client.aclose()
-        self.clients = {}
+    async def close(self) -> None:
+        """Close all HTTP clients and clean up resources.
+
+        This should be called when the application is shutting down.
+        """
+        try:
+            for provider, client in self.clients.items():
+                try:
+                    await client.aclose()
+                except Exception as e:
+                    logger.error(f"Error closing client for provider {provider}: {str(e)}")
+            self.clients = {}
+        except Exception as e:
+            logger.error(f"Error during client cleanup: {str(e)}")
+            raise
 
     async def call_model(self, model: ModelEntry, request: ModelRequest) -> ModelResponse:
-        """Call a model with retry logic and fallback"""
+        """Call a model with retry logic and fallback.
+
+        Args:
+            model: The model to call
+            request: The request to send to the model
+
+        Returns:
+            ModelResponse: The response from the model
+
+        Raises:
+            Exception: If all retry attempts fail
+        """
         start_time = time.time()
         last_error = None
+        attempt = 0
 
-        for attempt in range(self.max_retries):
-            try:
-                if model.is_local:
-                    return await self._call_local_model(model, request)
-                else:
-                    return await self._call_cloud_model(model, request)
-            except Exception as e:
-                last_error = e
-                logger.warning(f"Attempt {attempt + 1} failed for {model.model_id}: {str(e)}")
-                if attempt < self.max_retries - 1:
-                    await asyncio.sleep(self.retry_delay * (attempt + 1))
+        # Record request metrics
+        request_metric = {
+            "model_id": model.model_id,
+            "provider": model.provider,
+            "timestamp": datetime.now().isoformat(),
+            "attempts": 0,
+            "success": False,
+            "latency": 0,
+            "error": None
+        }
 
-        latency = time.time() - start_time
-        raise Exception(f"All {self.max_retries} attempts failed for {model.model_id}: {str(last_error)}")
+        try:
+            for attempt in range(self.max_retries):
+                try:
+                    if model.is_local:
+                        response = await self._call_local_model(model, request)
+                    else:
+                        response = await self._call_cloud_model(model, request)
+
+                    # Record successful response
+                    request_metric.update({
+                        "attempts": attempt + 1,
+                        "success": True,
+                        "latency": time.time() - start_time
+                    })
+                    self.request_metrics.append(request_metric)
+
+                    return response
+
+                except Exception as e:
+                    last_error = e
+                    logger.warning(f"Attempt {attempt + 1} failed for {model.model_id}: {str(e)}")
+                    request_metric["error"] = str(e)
+
+                    if attempt < self.max_retries - 1:
+                        await asyncio.sleep(self.retry_delay * (attempt + 1))
+
+            # If we get here, all attempts failed
+            latency = time.time() - start_time
+            error_msg = f"All {self.max_retries} attempts failed for {model.model_id}: {str(last_error)}"
+
+            request_metric.update({
+                "attempts": self.max_retries,
+                "latency": latency,
+                "error": error_msg
+            })
+            self.request_metrics.append(request_metric)
+
+            raise Exception(error_msg)
+
+        except Exception as e:
+            # Record failed request
+            if not request_metric.get("error"):
+                request_metric["error"] = str(e)
+            if not request_metric.get("latency"):
+                request_metric["latency"] = time.time() - start_time
+            self.request_metrics.append(request_metric)
+
+            # Clean up old metrics to prevent memory leaks
+            if len(self.request_metrics) > 1000:
+                self.request_metrics = self.request_metrics[-1000:]
+
+            raise
 
     async def _call_local_model(self, model: ModelEntry, request: ModelRequest) -> ModelResponse:
-        """Call a local Ollama model"""
+        """Call a local Ollama model.
+
+        Args:
+            model: The local model to call
+            request: The request to send to the model
+
+        Returns:
+            ModelResponse: The response from the model
+
+        Raises:
+            Exception: If the call fails
+        """
+        if not model.is_local:
+            raise ValueError(f"Model {model.model_id} is not a local model")
+
         client = await self.get_client("ollama")
         endpoint = model.endpoint or "http://localhost:11434/api/chat"
 
         try:
             start_time = time.time()
+
+            payload = {
+                "model": model.model_name,
+                "messages": request.messages,
+                "stream": request.stream,
+                "options": {
+                    "temperature": request.temperature
+                }
+            }
+
+            # Add max_tokens if specified
+            if request.max_tokens:
+                payload["options"]["num_predict"] = request.max_tokens
+
             response = await client.post(
                 endpoint,
-                json={
-                    "model": model.model_name,
-                    "messages": request.messages,
-                    "stream": request.stream,
-                    "options": {
-                        "temperature": request.temperature
-                    }
-                }
+                json=payload,
+                headers={"Content-Type": "application/json"}
             )
 
             latency = time.time() - start_time
 
             if response.status_code != 200:
-                error_msg = response.json().get("error", "Unknown error")
+                try:
+                    error_data = response.json()
+                    error_msg = error_data.get("error", f"HTTP {response.status_code}")
+                except:
+                    error_msg = f"HTTP {response.status_code}: {response.text}"
+
                 raise Exception(f"Local model {model.model_id} failed: {error_msg}")
 
             result = response.json()
-            content = result.get("message", {}).get("content", "")
-            tokens_used = result.get("prompt_eval_count", 0) + result.get("eval_count", 0)
+
+            # Handle different response formats
+            if "message" in result:
+                content = result["message"].get("content", "")
+                tokens_used = result.get("prompt_eval_count", 0) + result.get("eval_count", 0)
+            elif "response" in result:
+                content = result.get("response", "")
+                tokens_used = result.get("prompt_eval_count", 0) + result.get("eval_count", 0)
+            else:
+                content = str(result)
+                tokens_used = None
 
             return ModelResponse(
                 content=content,
@@ -106,12 +265,32 @@ class UniversalClient:
                 tokens_used=tokens_used
             )
 
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error calling local model {model.model_id}: {str(e)}")
+            raise Exception(f"HTTP error calling local model {model.model_id}: {str(e)}")
         except Exception as e:
-            logger.error(f"Error calling local model {model.model_id}: {str(e)}")
+            logger.error(f"Error calling local model {model.model_id}: {str(e)}", exc_info=True)
             raise
 
     async def _call_cloud_model(self, model: ModelEntry, request: ModelRequest) -> ModelResponse:
-        """Call a cloud API model"""
+        """Call a cloud API model.
+
+        Args:
+            model: The cloud model to call
+            request: The request to send to the model
+
+        Returns:
+            ModelResponse: The response from the model
+
+        Raises:
+            Exception: If the call fails
+        """
+        if model.is_local:
+            raise ValueError(f"Model {model.model_id} is not a cloud model")
+
+        if not model.api_key:
+            raise ValueError(f"API key not configured for cloud model {model.model_id}")
+
         client = await self.get_client(model.provider)
 
         try:
@@ -120,12 +299,14 @@ class UniversalClient:
             # Prepare headers and payload based on provider
             headers = {}
             payload = {}
+            endpoint = model.endpoint
 
             if model.provider == "openrouter":
                 headers = {
                     "Authorization": f"Bearer {model.api_key}",
                     "HTTP-Referer": "http://localhost:3000",
-                    "X-Title": "JARVIS V5.0"
+                    "X-Title": "JARVIS V5.0",
+                    "Content-Type": "application/json"
                 }
                 payload = {
                     "model": model.model_name,
@@ -133,7 +314,9 @@ class UniversalClient:
                     "stream": request.stream,
                     "temperature": request.temperature
                 }
-                endpoint = model.endpoint or "https://openrouter.ai/api/v1/chat/completions"
+                if request.max_tokens:
+                    payload["max_tokens"] = request.max_tokens
+                endpoint = endpoint or "https://openrouter.ai/api/v1/chat/completions"
 
             elif model.provider == "gemini":
                 headers = {
@@ -147,7 +330,7 @@ class UniversalClient:
                         "maxOutputTokens": request.max_tokens or 8192
                     }
                 }
-                endpoint = model.endpoint or f"https://generativelanguage.googleapis.com/v1beta/models/{model.model_name}:generateContent"
+                endpoint = endpoint or f"https://generativelanguage.googleapis.com/v1beta/models/{model.model_name}:generateContent"
 
             elif model.provider == "mistral":
                 headers = {
@@ -158,10 +341,11 @@ class UniversalClient:
                     "model": model.model_name,
                     "messages": request.messages,
                     "stream": request.stream,
-                    "temperature": request.temperature,
-                    "max_tokens": request.max_tokens
+                    "temperature": request.temperature
                 }
-                endpoint = model.endpoint or "https://api.mistral.ai/v1/chat/completions"
+                if request.max_tokens:
+                    payload["max_tokens"] = request.max_tokens
+                endpoint = endpoint or "https://api.mistral.ai/v1/chat/completions"
 
             elif model.provider == "together":
                 headers = {
@@ -172,13 +356,17 @@ class UniversalClient:
                     "model": model.model_name,
                     "messages": request.messages,
                     "stream": request.stream,
-                    "temperature": request.temperature,
-                    "max_tokens": request.max_tokens
+                    "temperature": request.temperature
                 }
-                endpoint = model.endpoint or "https://api.together.xyz/v1/chat/completions"
+                if request.max_tokens:
+                    payload["max_tokens"] = request.max_tokens
+                endpoint = endpoint or "https://api.together.xyz/v1/chat/completions"
 
             else:
-                raise Exception(f"Unsupported cloud provider: {model.provider}")
+                raise ValueError(f"Unsupported cloud provider: {model.provider}")
+
+            if not endpoint:
+                raise ValueError(f"No endpoint configured for model {model.model_id}")
 
             response = await client.post(
                 endpoint,
@@ -189,18 +377,42 @@ class UniversalClient:
             latency = time.time() - start_time
 
             if response.status_code != 200:
-                error_msg = response.json().get("error", {}).get("message", "Unknown error")
+                try:
+                    error_data = response.json()
+                    if "error" in error_data:
+                        error_msg = error_data["error"].get("message", str(error_data["error"]))
+                    else:
+                        error_msg = str(error_data)
+                except:
+                    error_msg = f"HTTP {response.status_code}: {response.text}"
+
                 raise Exception(f"Cloud model {model.model_id} failed: {error_msg}")
 
             result = response.json()
 
             # Normalize response format
-            if model.provider == "gemini":
-                content = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                tokens_used = result.get("usageMetadata", {}).get("totalTokenCount", 0)
-            else:
-                content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-                tokens_used = result.get("usage", {}).get("total_tokens", 0)
+            content = ""
+            tokens_used = None
+
+            try:
+                if model.provider == "gemini":
+                    if "candidates" in result and len(result["candidates"]) > 0:
+                        candidate = result["candidates"][0]
+                        if "content" in candidate and "parts" in candidate["content"]:
+                            parts = candidate["content"]["parts"]
+                            if len(parts) > 0 and "text" in parts[0]:
+                                content = parts[0]["text"]
+                    tokens_used = result.get("usageMetadata", {}).get("totalTokenCount", 0)
+                else:
+                    if "choices" in result and len(result["choices"]) > 0:
+                        choice = result["choices"][0]
+                        if "message" in choice and "content" in choice["message"]:
+                            content = choice["message"]["content"]
+                    tokens_used = result.get("usage", {}).get("total_tokens", 0)
+            except Exception as e:
+                logger.warning(f"Failed to parse response from {model.model_id}: {str(e)}")
+                content = str(result)
+                tokens_used = None
 
             return ModelResponse(
                 content=content,
@@ -210,14 +422,22 @@ class UniversalClient:
                 tokens_used=tokens_used
             )
 
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error calling cloud model {model.model_id}: {str(e)}")
+            raise Exception(f"HTTP error calling cloud model {model.model_id}: {str(e)}")
         except Exception as e:
-            logger.error(f"Error calling cloud model {model.model_id}: {str(e)}")
+            logger.error(f"Error calling cloud model {model.model_id}: {str(e)}", exc_info=True)
             raise
 
 # Global client instance
 _universal_client = UniversalClient()
 
 async def get_universal_client() -> UniversalClient:
+    """Get the global universal client instance.
+
+    Returns:
+        UniversalClient: The global universal client instance
+    """
     return _universal_client
 import httpx
 import logging
