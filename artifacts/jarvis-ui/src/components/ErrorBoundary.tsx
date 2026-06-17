@@ -26,6 +26,10 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    toast.error('System Error', {
+      description: 'An unexpected error occurred. Please try refreshing the page.',
+      duration: 5000,
+    });
   }
 
   handleRetry = () => {
