@@ -12,12 +12,22 @@ import cv2
 from PIL import Image
 import io
 import aiofiles
+import base64
+import wave
+import numpy as np
+from scipy import signal
+import speech_recognition as sr
+from gtts import gTTS
+import tempfile
 
 app = FastAPI()
 
 # Configure upload directory
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+# Audio processing setup
+recognizer = sr.Recognizer()
 
 class ConnectionManager:
     def __init__(self):
@@ -155,6 +165,115 @@ async def process_document(file_path: Path):
     # Split into chunks (for example, by lines or fixed size)
     chunks = [content[i:i+1000] for i in range(0, len(content), 1000)]
     return chunks
+
+@app.post("/api/v1/audio/stt")
+async def speech_to_text(audio: UploadFile = File(...)):
+    """Convert speech to text using Google's Speech Recognition"""
+    try:
+        # Save the uploaded audio to a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
+            content = await audio.read()
+            temp_audio.write(content)
+            temp_audio_path = temp_audio.name
+        
+        # Use speech recognition
+        with sr.AudioFile(temp_audio_path) as source:
+            audio_data = recognizer.record(source)
+            text = recognizer.recognize_google(audio_data)
+        
+        # Clean up
+        os.unlink(temp_audio_path)
+        
+        return {"text": text}
+    except sr.UnknownValueError:
+        raise HTTPException(status_code=400, detail="Could not understand audio")
+    except sr.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Speech recognition error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing audio: {str(e)}")
+
+@app.post("/api/v1/audio/tts")
+async def text_to_speech(text: str = Form(...)):
+    """Convert text to speech using gTTS with JARVIS-like voice"""
+    try:
+        # Generate speech
+        tts = gTTS(text=text, lang='en', slow=False)
+        
+        # Save to temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_audio:
+            tts.save(temp_audio.name)
+            with open(temp_audio.name, 'rb') as f:
+                audio_data = f.read()
+        
+        # Clean up
+        os.unlink(temp_audio.name)
+        
+        # Encode to base64 for easy transmission
+        audio_base64 = base64.b64encode(audio_data).decode('utf-8')
+        
+        return {
+            "audio_base64": audio_base64,
+            "text": text
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating speech: {str(e)}")
+
+@app.post("/api/v1/audio/analyze")
+async def analyze_audio(audio: UploadFile = File(...)):
+    """Analyze audio to generate FFT data for visualization"""
+    try:
+        # Save the uploaded audio to a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
+            content = await audio.read()
+            temp_audio.write(content)
+            temp_audio_path = temp_audio.name
+        
+        # Read the WAV file
+        with wave.open(temp_audio_path, 'rb') as wav_file:
+            # Get audio parameters
+            n_channels = wav_file.getnchannels()
+            sampwidth = wav_file.getsampwidth()
+            framerate = wav_file.getframerate()
+            n_frames = wav_file.getnframes()
+            
+            # Read audio data
+            frames = wav_file.readframes(n_frames)
+        
+        # Convert to numpy array
+        if sampwidth == 1:
+            dtype = np.uint8
+        elif sampwidth == 2:
+            dtype = np.int16
+        else:
+            dtype = np.int32
+        
+        audio_data = np.frombuffer(frames, dtype=dtype)
+        
+        # If stereo, convert to mono by averaging channels
+        if n_channels > 1:
+            audio_data = audio_data.reshape(-1, n_channels)
+            audio_data = np.mean(audio_data, axis=1)
+        
+        # Generate FFT
+        fft_data = np.fft.fft(audio_data)
+        freqs = np.fft.fftfreq(len(fft_data), 1.0/framerate)
+        
+        # Get magnitude and limit to positive frequencies
+        magnitude = np.abs(fft_data)
+        positive_freq_idx = freqs > 0
+        freqs = freqs[positive_freq_idx]
+        magnitude = magnitude[positive_freq_idx]
+        
+        # Clean up
+        os.unlink(temp_audio_path)
+        
+        # Return a subset of the data for performance
+        return {
+            "frequencies": freqs[::100].tolist(),  # Downsample
+            "magnitude": magnitude[::100].tolist()  # Downsample
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error analyzing audio: {str(e)}")
 
 @app.post("/api/v1/sensory/ingestion")
 async def ingest_file(
@@ -326,6 +445,50 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 except Exception as e:
                     await manager.send_personal_message({
                         "type": "file_upload_failed",
+                        "request_id": request_id,
+                        "reason": str(e)
+                    }, client_id)
+            
+            elif message_type == "audio_analysis_request":
+                # Handle real-time audio analysis requests
+                request_id = message.get("request_id")
+                audio_data_base64 = message.get("audio_data")
+                
+                try:
+                    # Decode base64 audio data
+                    audio_bytes = base64.b64decode(audio_data_base64)
+                    
+                    # Save to temporary file for processing
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
+                        temp_audio.write(audio_bytes)
+                        temp_audio_path = temp_audio.name
+                    
+                    # Process the audio to generate FFT data
+                    # This is a simplified version - in reality, you'd want to process the audio directly
+                    # without writing to disk for better performance
+                    with wave.open(temp_audio_path, 'rb') as wav_file:
+                        n_frames = wav_file.getnframes()
+                        frames = wav_file.readframes(n_frames)
+                    
+                    # Convert to numpy array and process
+                    audio_array = np.frombuffer(frames, dtype=np.int16)
+                    fft_data = np.fft.fft(audio_array)
+                    freqs = np.fft.fftfreq(len(fft_data), 1.0/44100)  # Assuming 44.1kHz sample rate
+                    
+                    magnitude = np.abs(fft_data)
+                    # Send the analysis back
+                    await manager.send_personal_message({
+                        "type": "audio_analysis_response",
+                        "request_id": request_id,
+                        "frequencies": freqs[:100].tolist(),  # Send first 100 points
+                        "magnitude": magnitude[:100].tolist()  # Send first 100 points
+                    }, client_id)
+                    
+                    # Clean up
+                    os.unlink(temp_audio_path)
+                except Exception as e:
+                    await manager.send_personal_message({
+                        "type": "audio_analysis_failed",
                         "request_id": request_id,
                         "reason": str(e)
                     }, client_id)
