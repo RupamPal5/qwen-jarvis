@@ -537,8 +537,6 @@ export default function JarvisUI() {
     };
   }, [initializePersistence, notificationSystem, reconnectWebSocket]);
 
-  const { messages, addMessage, systemStatus, setSystemStatus, setAudioAmplitude, ollamaOnline, ollamaModelCount } = useStore();
-
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptsRef = useRef(0);
