@@ -205,7 +205,7 @@ interface SystemMetrics {
 
 interface Notification {
   id: string;
-  type: "INFO" | "SUCCESS" | "WARNING" | "ERROR";
+  type: "INFO" | "SUCCESS" | "WARNING" | "ERROR" | "MODEL_UPDATE";
   title: string;
   message: string;
   timestamp: Date;
