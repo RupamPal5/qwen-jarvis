@@ -511,6 +511,8 @@ export default function JarvisUI() {
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const maxReconnectAttempts = 5;
   const folderNameInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize persistence layer
@@ -559,7 +561,7 @@ export default function JarvisUI() {
       const wsUrl = (import.meta.env.VITE_WS_URL as string) || `ws://${window.location.host}/ws`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
-      
+
       ws.onopen = () => {
         notificationSystem.addNotification({
           type: "SUCCESS",
@@ -568,7 +570,7 @@ export default function JarvisUI() {
           duration: 3000,
         });
       };
-      
+
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
@@ -579,6 +581,16 @@ export default function JarvisUI() {
               content: data.text,
               timestamp: new Date(),
             });
+          } else if (data.type === "config_updated") {
+            // Configuration was updated, refresh model assignments
+            notificationSystem.addNotification({
+              type: "INFO",
+              title: "Configuration Updated",
+              message: "Model assignments have been updated",
+              duration: 3000,
+            });
+            // Optionally refresh the UI or reconnect to get updated state
+            // For now, we'll just notify the user
           }
         } catch {}
       };
@@ -586,7 +598,83 @@ export default function JarvisUI() {
       ws.onerror = () => {
         // Silent — backend may not be running
       };
-      
+
+      ws.onclose = () => {
+        // Handle WebSocket close and attempt to reconnect
+        notificationSystem.addNotification({
+          type: "WARNING",
+          title: "Connection Lost",
+          message: "Disconnected from backend, attempting to reconnect...",
+          duration: 3000,
+        });
+
+        // Attempt to reconnect
+        const attemptReconnect = () => {
+          if (reconnectAttemptsRef.current < maxReconnectAttempts) {
+            reconnectAttemptsRef.current++;
+            setTimeout(() => {
+              // Try to reconnect
+              try {
+                const wsUrl = (import.meta.env.VITE_WS_URL as string) || `ws://${window.location.host}/ws`;
+                const newWs = new WebSocket(wsUrl);
+                wsRef.current = newWs;
+
+                newWs.onopen = () => {
+                  reconnectAttemptsRef.current = 0;
+                  notificationSystem.addNotification({
+                    type: "SUCCESS",
+                    title: "Reconnected",
+                    message: "Successfully reconnected to JARVIS backend",
+                    duration: 3000,
+                  });
+                };
+
+                newWs.onmessage = (event) => {
+                  try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "response") {
+                      addMessage({
+                        id: generateId(),
+                        role: "jarvis",
+                        content: data.text,
+                        timestamp: new Date(),
+                      });
+                    } else if (data.type === "config_updated") {
+                      // Configuration was updated, refresh model assignments
+                      notificationSystem.addNotification({
+                        type: "INFO",
+                        title: "Configuration Updated",
+                        message: "Model assignments have been updated",
+                        duration: 3000,
+                      });
+                    }
+                  } catch {}
+                };
+
+                newWs.onerror = () => {
+                  attemptReconnect();
+                };
+
+                newWs.onclose = () => {
+                  attemptReconnect();
+                };
+              } catch {
+                attemptReconnect();
+              }
+            }, 2000 * reconnectAttemptsRef.current); // Exponential backoff
+          } else {
+            notificationSystem.addNotification({
+              type: "ERROR",
+              title: "Connection Failed",
+              message: "Could not reconnect to backend after multiple attempts",
+              duration: 5000,
+            });
+          }
+        };
+
+        attemptReconnect();
+      };
+
       return () => ws.close();
     } catch {
       // WebSocket not available
@@ -602,18 +690,98 @@ export default function JarvisUI() {
   
   const handleSendMessage = useCallback((text: string) => {
     if (!text.trim()) return;
-    
+
     addMessage({
       id: generateId(),
       role: "user",
       content: text,
       timestamp: new Date(),
     });
-    
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "command", text }));
+    } else {
+      // Try to reconnect if WebSocket is not open
+      notificationSystem.addNotification({
+        type: "WARNING",
+        title: "Connection Issue",
+        message: "WebSocket not connected, attempting to reconnect...",
+        duration: 3000,
+      });
+      reconnectWebSocket();
     }
   }, [addMessage]);
+
+  const reconnectWebSocket = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
+    try {
+      const wsUrl = (import.meta.env.VITE_WS_URL as string) || `ws://${window.location.host}/ws`;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+      reconnectAttemptsRef.current = 0;
+
+      ws.onopen = () => {
+        notificationSystem.addNotification({
+          type: "SUCCESS",
+          title: "Reconnected",
+          message: "Successfully reconnected to JARVIS backend",
+          duration: 3000,
+        });
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "response") {
+            addMessage({
+              id: generateId(),
+              role: "jarvis",
+              content: data.text,
+              timestamp: new Date(),
+            });
+          } else if (data.type === "config_updated") {
+            // Configuration was updated, refresh model assignments
+            notificationSystem.addNotification({
+              type: "INFO",
+              title: "Configuration Updated",
+              message: "Model assignments have been updated",
+              duration: 3000,
+            });
+          }
+        } catch {}
+      };
+
+      ws.onerror = () => {
+        notificationSystem.addNotification({
+          type: "ERROR",
+          title: "Connection Error",
+          message: "WebSocket connection error",
+          duration: 3000,
+        });
+      };
+
+      ws.onclose = () => {
+        notificationSystem.addNotification({
+          type: "WARNING",
+          title: "Connection Closed",
+          message: "WebSocket connection closed",
+          duration: 3000,
+        });
+      };
+
+    } catch {
+      notificationSystem.addNotification({
+        type: "ERROR",
+        title: "Connection Failed",
+        message: "Could not establish WebSocket connection",
+        duration: 3000,
+      });
+    }
+  }, [addMessage, notificationSystem]);
 
   const [chatInput, setChatInput] = useState("");
 
@@ -1074,6 +1242,16 @@ export default function JarvisUI() {
             />
             {ollamaOnline === true? `AI · ${ollamaModelCount}M` : "AI OFFLINE"}
           </motion.div>
+
+          {/* Reconnect Button */}
+          <button
+            onClick={reconnectWebSocket}
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono font-bold tracking-widest cursor-pointer transition-all border-cyan-500/30 text-cyan-100 bg-cyan-500/10 hover:bg-cyan-500/20"
+            title="Reconnect WebSocket"
+          >
+            <RefreshCw className="w-3 h-3" />
+            RECONNECT
+          </button>
         </div>
         
         <div className="flex items-center gap-3">

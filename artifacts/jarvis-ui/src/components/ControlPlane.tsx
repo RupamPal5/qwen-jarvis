@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Loader2, Check, X, Cpu, Shield, Gavel, Zap, Activity, Rocket, ChevronDown, AlertCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
+import { CheckCircle, XCircle } from 'lucide-react';
 import { GlassmorphicPanel } from './glassmorphic-panel';
 import { ModelEntry } from '../types/models';
 import { SkeletonCard, SkeletonDropdown, SkeletonLoader } from './SkeletonLoader';
@@ -46,6 +47,45 @@ export function ControlPlane() {
     JUDGE: '',
   });
   const [isApplying, setIsApplying] = useState(false);
+
+  const notifyConfigUpdated = () => {
+    // Notify via WebSocket if available
+    if (window.WebSocket) {
+      try {
+        const wsUrl = (import.meta.env.VITE_WS_URL as string) || `ws://${window.location.host}/ws`;
+        const ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          ws.send(JSON.stringify({
+            type: "config_updated",
+            timestamp: new Date().toISOString()
+          }));
+          ws.close();
+        };
+
+        ws.onerror = () => {
+          // Fallback: dispatch custom event
+          window.dispatchEvent(new CustomEvent('configUpdated'));
+        };
+      } catch {
+        // Fallback: dispatch custom event
+        window.dispatchEvent(new CustomEvent('configUpdated'));
+      }
+    } else {
+      // Fallback: dispatch custom event
+      window.dispatchEvent(new CustomEvent('configUpdated'));
+    }
+  };
+
+  // Test function for development (comment out in production)
+  /*
+  const testConfigUpdate = () => {
+    window.dispatchEvent(new CustomEvent('configUpdated'));
+    toast.info('Test config update triggered', {
+      duration: 3000,
+    });
+  };
+  */
   const [modelStatuses, setModelStatuses] = useState<Record<string, ModelStatus>>({});
   const [healthMetrics, setHealthMetrics] = useState<HealthMetrics>({});
   const [ws, setWs] = useState<WebSocket | null>(null);
@@ -205,7 +245,11 @@ export function ControlPlane() {
       }
 
       const result = await response.json();
-      toast.success('Model configuration deployed successfully');
+      toast.success('Configuration Deployed Successfully!', {
+        description: 'Model assignments have been updated',
+        icon: <CheckCircle className="h-5 w-5 text-green-500" />,
+        duration: 5000,
+      });
       setActivePreset('');
 
       // Update local state with new assignments
@@ -215,8 +259,15 @@ export function ControlPlane() {
         JUDGE: result.config.JUDGE,
       });
 
+      // Notify other components that configuration was updated
+      notifyConfigUpdated();
+
     } catch (error) {
-      toast.error(`Failed to deploy configuration: ${error instanceof Error ? error.message : String(error)}`);
+      toast.error('Deployment Failed', {
+        description: error instanceof Error ? error.message : String(error),
+        icon: <XCircle className="h-5 w-5 text-red-500" />,
+        duration: 5000,
+      });
     } finally {
       setIsApplying(false);
     }

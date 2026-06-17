@@ -19,6 +19,7 @@ from routes import router as api_router
 from pydantic import BaseModel
 from datetime import datetime
 import os
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -345,7 +346,7 @@ class ConnectionManager:
         logger.debug(f"Broadcast model {model_id} status to {sent_count} clients")
         return sent_count
 
-    async def broadcast_to_all(self, message: dict) -> int:
+    async def broadcast_to_all(self, message: Dict[str, Any]) -> int:
         """Broadcast a message to all connected clients.
 
         Args:

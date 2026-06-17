@@ -15,6 +15,7 @@ from core.network_manager import get_network_manager
 from core.health_monitor import get_health_monitor
 from security.encryption import get_api_key_encryptor
 from core.consensus_v2 import get_consensus_engine
+from backend.main import manager
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,9 @@ async def apply_preset(request: PresetRequest, request_obj: Request) -> Dict:
             if not success:
                 raise HTTPException(status_code=400, detail=f"Failed to assign {model_id} to {role}")
 
+        # Notify WebSocket clients about the config update
+        await notify_config_updated()
+
         return {
             "status": "success",
             "message": "Preset applied successfully",
@@ -168,6 +172,9 @@ async def assign_model_to_role(request: ModelAssignmentRequest, request_obj: Req
 
     if not success:
         raise HTTPException(status_code=400, detail="Failed to assign model to role")
+
+    # Notify WebSocket clients about the config update
+    await notify_config_updated()
 
     return {
         "status": "success",
@@ -248,6 +255,18 @@ async def get_error_stats(request: Request) -> Dict:
 
 # Application start time for uptime calculation
 START_TIME = time.time()
+
+async def notify_config_updated():
+    """Notify all WebSocket clients that the configuration has been updated."""
+    try:
+        message = {
+            "type": "config_updated",
+            "timestamp": datetime.now().isoformat(),
+            "message": "Model configuration has been updated"
+        }
+        await manager.broadcast_to_all(message)
+    except Exception as e:
+        logger.error(f"Failed to notify config update: {str(e)}")
 
 @router.get("/metrics")
 async def get_metrics(request: Request) -> Dict:
