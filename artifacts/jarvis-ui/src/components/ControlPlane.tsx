@@ -47,6 +47,8 @@ export function ControlPlane() {
     JUDGE: '',
   });
   const [isApplying, setIsApplying] = useState(false);
+
+  const notifyConfigUpdated = () => {
     // Notify via WebSocket if available
     if (window.WebSocket) {
       try {
