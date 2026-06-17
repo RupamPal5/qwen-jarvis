@@ -178,6 +178,17 @@ class ConsensusEngineV2:
                 logger.error(f"Consensus failed: {error_msg}")
                 result["error"] = error_msg
                 return result
+        except Exception as e:
+            logger.error(f"Consensus execution failed: {str(e)}", exc_info=True)
+            result["error"] = str(e)
+            self.logger.log_consensus_execution(
+                request_id=request_id,
+                status="error",
+                duration=time.time() - start_time,
+                models_used={},
+                error=str(e)
+            )
+            return result
 
             # Run Architect and Arbiter in parallel for better performance
             step1_start = time.time()
