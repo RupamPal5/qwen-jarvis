@@ -518,7 +518,25 @@ export default function JarvisUI() {
   // Initialize persistence layer
   useEffect(() => {
     initializePersistence();
-  }, [initializePersistence]);
+
+    // Listen for configuration updates
+    const handleConfigUpdate = () => {
+      notificationSystem.addNotification({
+        type: "INFO",
+        title: "Configuration Updated",
+        message: "Model assignments have been updated",
+        duration: 3000,
+      });
+      // Optionally refresh data or reconnect WebSocket
+      reconnectWebSocket();
+    };
+
+    window.addEventListener('configUpdated', handleConfigUpdate);
+
+    return () => {
+      window.removeEventListener('configUpdated', handleConfigUpdate);
+    };
+  }, [initializePersistence, notificationSystem, reconnectWebSocket]);
 
   // Apply theme on mount and when it changes
   useEffect(() => {
@@ -675,7 +693,12 @@ export default function JarvisUI() {
         attemptReconnect();
       };
 
-      return () => ws.close();
+      return () => {
+        if (wsRef.current) {
+          wsRef.current.close();
+          wsRef.current = null;
+        }
+      };
     } catch {
       // WebSocket not available
     }
