@@ -521,7 +521,7 @@ class UniversalClient:
 
         async with self.connection_pool.acquire(model.provider) as client:
             try:
-            start_time = time.time()
+                start_time = time.time()
 
             # Prepare headers and payload based on provider
             headers = {}
@@ -592,14 +592,14 @@ class UniversalClient:
             else:
                 raise ValueError(f"Unsupported cloud provider: {model.provider}")
 
-            if not endpoint:
-                raise ValueError(f"No endpoint configured for model {model.model_id}")
+                if not endpoint:
+                    raise ValueError(f"No endpoint configured for model {model.model_id}")
 
-            response = await client.post(
-                endpoint,
-                headers=headers,
-                json=payload
-            )
+                response = await client.post(
+                    endpoint,
+                    headers=headers,
+                    json=payload
+                )
 
             latency = time.time() - start_time
 
