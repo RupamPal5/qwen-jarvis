@@ -12,6 +12,7 @@ from core.consensus_v2 import get_consensus_engine
 from core.network_manager import get_network_manager
 from security.protocol import get_security_protocol
 from routes import router as api_router
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,103 @@ class ConnectionManager:
                     "model_id": model_id,
                     "status": status
                 }, client_id)
+
+class ModelConfigRequest(BaseModel):
+    architect: str
+    arbiter: str
+    judge: str
+
+# Include API routes
+app.include_router(api_router, prefix="/api")
+
+manager = ConnectionManager()
+
+@app.get("/api/models")
+async def list_models():
+    """List all available models"""
+    return model_registry.models
+
+@app.post("/api/config/apply")
+async def apply_model_config(config: ModelConfigRequest):
+    """Apply a new model configuration"""
+    try:
+        # Assign models to roles
+        role_manager.assign_role("ARCHITECT", config.architect)
+        role_manager.assign_role("ARBITER", config.arbiter)
+        role_manager.assign_role("JUDGE", config.judge)
+
+        # Validate the configuration
+        if not role_manager.validate_assignments():
+            raise HTTPException(status_code=400, detail="Invalid model assignments")
+
+        return {
+            "status": "success",
+            "message": "Model configuration applied successfully",
+            "config": {
+                "ARCHITECT": config.architect,
+                "ARBITER": config.arbiter,
+                "JUDGE": config.judge
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    await manager.connect(websocket, client_id)
+    try:
+        while True:
+            # Receive message from client
+            data = await websocket.receive_text()
+            message = json.loads(data)
+
+            # Handle different message types
+            message_type = message.get("type")
+
+            if message_type == "process_request":
+                await manager.send_personal_message({
+                    "type": "processing_started",
+                    "request_id": message.get("request_id")
+                }, client_id)
+
+                # Execute consensus process
+                try:
+                    result = await consensus_engine.execute_consensus(
+                        message.get("input", ""),
+                        message.get("workspace_id")
+                    )
+
+                    await manager.send_personal_message({
+                        "type": "consensus_result",
+                        "request_id": message.get("request_id"),
+                        "result": result
+                    }, client_id)
+                except Exception as e:
+                    await manager.send_personal_message({
+                        "type": "consensus_error",
+                        "request_id": message.get("request_id"),
+                        "error": str(e)
+                    }, client_id)
+
+            elif message_type == "subscribe_model_status":
+                model_id = message.get("model_id")
+                if model_id:
+                    await manager.subscribe_to_model_status(model_id, client_id)
+                    status = network_manager.get_model_status(model_id)
+                    if status:
+                        await manager.send_personal_message({
+                            "type": "model_status_update",
+                            "model_id": model_id,
+                            "status": status
+                        }, client_id)
+
+            elif message_type == "unsubscribe_model_status":
+                model_id = message.get("model_id")
+                if model_id:
+                    await manager.unsubscribe_from_model_status(model_id, client_id)
+
+    except WebSocketDisconnect:
+        manager.disconnect(client_id)
 
 
 class DiffEngine:
