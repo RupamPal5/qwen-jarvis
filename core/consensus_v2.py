@@ -179,28 +179,6 @@ class ConsensusEngineV2:
                 error=str(e)
             )
             return result
-        except Exception as e:
-            logger.error(f"Error validating input: {str(e)}")
-            result["error"] = f"Validation error: {str(e)}"
-            self.logger.log_consensus_execution(
-                request_id=request_id,
-                status="error",
-                duration=time.time() - start_time,
-                models_used={},
-                error=str(e)
-            )
-            return result
-        except Exception as e:
-            logger.error(f"Error validating input: {str(e)}")
-            result["error"] = f"Validation error: {str(e)}"
-            self.logger.log_consensus_execution(
-                request_id=request_id,
-                status="error",
-                duration=time.time() - start_time,
-                models_used={},
-                error=str(e)
-            )
-            return result
 
         try:
             logger.info(f"Starting consensus execution for request {request_id}")
