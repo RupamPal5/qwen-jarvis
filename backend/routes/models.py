@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request, Depends
+import logging
 from typing import Dict, List, Optional
 from models.registry import ModelEntry, get_model_registry
 from core.role_manager import get_role_manager
@@ -7,6 +8,12 @@ import yaml
 from pathlib import Path
 from gateway.validator import get_request_validator
 from security.protocol import get_security_protocol
+from core.error_handler import get_error_handler
+from core.network_manager import get_network_manager
+from core.health_monitor import get_health_monitor
+from security.encryption import get_api_key_encryptor
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
