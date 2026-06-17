@@ -1,4 +1,5 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Optional, List
 import json
 import asyncio
@@ -19,8 +20,22 @@ from scipy import signal
 import speech_recognition as sr
 from gtts import gTTS
 import tempfile
+from .routes import router as api_router
 
-app = FastAPI()
+app = FastAPI(
+    title="JARVIS V5.0 Integrated Operating Matrix",
+    description="Dynamic Hybrid Tri-Node Consensus Engine with Self-Modifying Infrastructure",
+    version="5.0.0"
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Configure upload directory
 UPLOAD_DIR = Path("uploads")
@@ -316,6 +331,9 @@ async def ingest_file(
             file_path.unlink()
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
+# Include API routes from the consensus engine
+app.include_router(api_router)
+
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     await manager.connect(websocket, client_id)
@@ -325,19 +343,19 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             # Receive message from client
             data = await websocket.receive_text()
             message = json.loads(data)
-            
+
             # Handle different message types
             message_type = message.get("type")
-            
+
             if message_type == "process_request":
                 await manager.send_personal_message({
                     "type": "processing_started",
                     "request_id": message.get("request_id")
                 }, client_id)
-                
+
                 # Simulate processing
                 await asyncio.sleep(1)
-                
+
                 # Send for authorization
                 await manager.send_personal_message({
                     "type": "authorization_required",
@@ -345,17 +363,17 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     "action": "This would describe the action to be authorized",
                     "payload": "Details about what will be executed"
                 }, client_id)
-            
+
             elif message_type == "authorization_response":
                 authorized = message.get("authorized", False)
                 request_id = message.get("request_id")
-                
+
                 if authorized:
                     await manager.send_personal_message({
                         "type": "execution_started",
                         "request_id": request_id
                     }, client_id)
-                    
+
                     # Handle code mutation if present
                     if 'diff' in message:
                         changes = DiffEngine.parse_diff(message['diff'])
@@ -365,7 +383,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                             if not success:
                                 all_success = False
                                 break
-                        
+
                         if all_success:
                             # Validate the build after applying changes
                             is_valid, validation_output = DiffEngine.validate_build()
@@ -400,7 +418,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                         "request_id": request_id,
                         "reason": "User denied authorization"
                     }, client_id)
-            
+
             elif message_type == "self_healing_patch":
                 # Handle a patch from the self-healing cycle
                 request_id = message.get("request_id")
@@ -422,7 +440,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                             "request_id": request_id,
                             "reason": validation_output
                         }, client_id)
-            
+
             elif message_type == "file_upload":
                 # Handle file upload via WebSocket (for smaller files or metadata)
                 # For larger files, use the HTTP endpoint
@@ -430,7 +448,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 file_data = message.get("file_data")
                 file_type = message.get("file_type")
                 project_id = message.get("project_id")
-                
+
                 # Process the file upload
                 # This is a simplified implementation
                 try:
@@ -448,33 +466,33 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                         "request_id": request_id,
                         "reason": str(e)
                     }, client_id)
-            
+
             elif message_type == "audio_analysis_request":
                 # Handle real-time audio analysis requests
                 request_id = message.get("request_id")
                 audio_data_base64 = message.get("audio_data")
-                
+
                 try:
                     # Decode base64 audio data
                     audio_bytes = base64.b64decode(audio_data_base64)
-                    
+
                     # Save to temporary file for processing
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
                         temp_audio.write(audio_bytes)
                         temp_audio_path = temp_audio.name
-                    
+
                     # Process the audio to generate FFT data
                     # This is a simplified version - in reality, you'd want to process the audio directly
                     # without writing to disk for better performance
                     with wave.open(temp_audio_path, 'rb') as wav_file:
                         n_frames = wav_file.getnframes()
                         frames = wav_file.readframes(n_frames)
-                    
+
                     # Convert to numpy array and process
                     audio_array = np.frombuffer(frames, dtype=np.int16)
                     fft_data = np.fft.fft(audio_array)
                     freqs = np.fft.fftfreq(len(fft_data), 1.0/44100)  # Assuming 44.1kHz sample rate
-                    
+
                     magnitude = np.abs(fft_data)
                     # Send the analysis back
                     await manager.send_personal_message({
@@ -483,7 +501,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                         "frequencies": freqs[:100].tolist(),  # Send first 100 points
                         "magnitude": magnitude[:100].tolist()  # Send first 100 points
                     }, client_id)
-                    
+
                     # Clean up
                     os.unlink(temp_audio_path)
                 except Exception as e:
@@ -492,6 +510,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                         "request_id": request_id,
                         "reason": str(e)
                     }, client_id)
-                    
+
     except WebSocketDisconnect:
         manager.disconnect(client_id)
