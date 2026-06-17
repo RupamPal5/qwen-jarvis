@@ -1,6 +1,7 @@
 // JARVIS V5.0 GOD PROTOCOL - ULTIMATE EDITION
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useStore } from "../store";
 import {
   Brain, Shield, Activity, MessageSquare, Terminal,
   Mic, Zap, Cpu, Network, Lock,
@@ -484,10 +485,26 @@ const Badge: React.FC<{
 // ============================================================================
 
 export default function JarvisUI() {
-  const [activeView, setActiveView] = useState<string>("dashboard");
+  const {
+    initializePersistence,
+    persistenceInitialized,
+    activePanel,
+    setActivePanel,
+    activeWorkspaceId,
+    workspaces,
+    folders,
+    createProjectFolder,
+    renameProjectFolder,
+    archiveProjectFolder,
+    setTheme,
+    theme
+  } = useStore();
+
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [themePanelOpen, setThemePanelOpen] = useState(false);
+  const [folderEditMode, setFolderEditMode] = useState<{ id: string; name: string } | null>(null);
   const themePanelRef = useRef<HTMLDivElement>(null);
+  const folderNameInputRef = useRef<HTMLInputElement>(null);
 
   const metrics = useSystemMetrics();
   const notificationSystem = useNotifications();
@@ -495,11 +512,25 @@ export default function JarvisUI() {
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const folderNameInputRef = useRef<HTMLInputElement>(null);
+
+  // Initialize persistence layer
+  useEffect(() => {
+    initializePersistence();
+  }, [initializePersistence]);
 
   // Apply theme on mount and when it changes
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  // Focus folder name input when edit mode is activated
+  useEffect(() => {
+    if (folderEditMode && folderNameInputRef.current) {
+      folderNameInputRef.current.focus();
+      folderNameInputRef.current.select();
+    }
+  }, [folderEditMode]);
 
   // Click-outside to close theme panel
   useEffect(() => {
@@ -857,21 +888,81 @@ export default function JarvisUI() {
     );
   };
 
+  // Group folders by type for sidebar organization
+  const folderGroups = useMemo(() => {
+    const groups: Record<string, ProjectFolder[]> = {
+      ai: [],
+      data: [],
+      sys: [],
+      workspace: []
+    };
+
+    Object.values(folders).forEach(folder => {
+      if (!folder.archived) {
+        if (folder.type === 'chat' || folder.type === 'quantum') {
+          groups.ai.push(folder);
+        } else if (folder.type === 'trading' || folder.type === 'swarm' || folder.type === 'blockchain') {
+          groups.data.push(folder);
+        } else if (folder.type === 'security' || folder.type === 'workspace') {
+          groups.sys.push(folder);
+        }
+      }
+    });
+
+    // Sort folders by order
+    Object.keys(groups).forEach(group => {
+      groups[group].sort((a, b) => a.order - b.order);
+    });
+
+    return groups;
+  }, [folders]);
+
   const navItems = [
     { id: "dashboard",   label: "Dashboard",       icon: LayoutDashboard, group: "core" },
     { id: "initialize",  label: "Boot Sequence",    icon: Power,           group: "core" },
+
+    // AI Section
+    ...folderGroups.ai.map(folder => ({
+      id: folder.id,
+      label: folder.name,
+      icon: getFolderIcon(folder.type),
+      group: "ai",
+      isFolder: true,
+      type: folder.type
+    })),
     { id: "chat",        label: "JARVIS AI",        icon: Brain,           group: "ai"   },
     { id: "terminal",    label: "Terminal",         icon: SquareCode,      group: "ai"   },
     { id: "voice",       label: "Voice & Audio",    icon: Mic,             group: "ai"   },
+
+    // Data Section
+    ...folderGroups.data.map(folder => ({
+      id: folder.id,
+      label: folder.name,
+      icon: getFolderIcon(folder.type),
+      group: "data",
+      isFolder: true,
+      type: folder.type
+    })),
     { id: "trading",     label: "Trading",          icon: BarChart3,       group: "data" },
     { id: "swarm",       label: "Swarm Network",    icon: Network,         group: "data" },
     { id: "blockchain",  label: "Blockchain",       icon: Shield,          group: "data" },
     { id: "knowledge",   label: "Knowledge Graph",  icon: Database,        group: "data" },
+
+    // System Section
+    ...folderGroups.sys.map(folder => ({
+      id: folder.id,
+      label: folder.name,
+      icon: getFolderIcon(folder.type),
+      group: "sys",
+      isFolder: true,
+      type: folder.type
+    })),
     { id: "security",    label: "Security",         icon: ShieldAlert,     group: "sys"  },
     { id: "files",       label: "File Manager",     icon: Folder,          group: "sys"  },
     { id: "iot",         label: "IoT Devices",      icon: Smartphone,      group: "sys"  },
     { id: "settings",    label: "Settings",         icon: Settings,        group: "sys"  },
-   ...EVOLUTION_NAV.map((e) => ({
+
+    ...EVOLUTION_NAV.map((e) => ({
       id: e.id,
       label: e.label,
       icon: Sparkles,
@@ -879,11 +970,43 @@ export default function JarvisUI() {
     })),
   ];
 
+  function getFolderIcon(type: ProjectType): React.ComponentType<{className?: string}> {
+    const icons = {
+      chat: MessageSquare,
+      trading: BarChart3,
+      swarm: Network,
+      blockchain: Shield,
+      quantum: Atom,
+      security: ShieldAlert,
+      workspace: Folder
+    };
+    return icons[type] || Folder;
+  }
+
   return (
     <div className="jarvis-root min-h-screen font-mono overflow-hidden relative">
-      <Scene3D />
-      
-      <header className="jarvis-header relative z-50 flex items-center justify-between px-6 py-4">
+      {!persistenceInitialized ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xl">
+          <div className="text-center">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+              className="mb-4"
+            >
+              <Brain className="w-12 h-12 text-purple-500 mx-auto" />
+            </motion.div>
+            <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">
+              INITIALIZING MEMORY LAYER...
+            </h2>
+            <p className="text-xs text-white/40 mt-2">Loading client-side persistence engine</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          <Scene3D />
+
+          <header className="jarvis-header relative z-50 flex items-center justify-between px-6 py-4">
+      )}
         <div className="flex items-center gap-4">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -1009,20 +1132,136 @@ export default function JarvisUI() {
               className="jarvis-sidebar overflow-hidden overflow-y-auto flex-shrink-0"
             >
               <nav className="p-3 space-y-0.5">
-                {navItems.map((item) => (
+                {navItems.map((item) => {
+                  const isActive = activePanel === item.id;
+                  return (
+                    <div key={item.id} className="group">
+                      <button
+                        onClick={async () => {
+                          if (item.isFolder) {
+                            // For folders, set as active panel and load project data
+                            setActivePanel(item.id);
+                          } else {
+                            setActivePanel(item.id);
+                          }
+                        }}
+                        onDoubleClick={() => {
+                          if (item.isFolder) {
+                            setFolderEditMode({ id: item.id, name: item.label });
+                          }
+                        }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
+                          isActive
+                           ? "nav-active"
+                            : "text-white/50 hover:bg-white/5 hover:text-white/90"
+                        }`}
+                      >
+                        <item.icon className="w-4 h-4 flex-shrink-0" />
+                        {folderEditMode?.id === item.id ? (
+                          <input
+                            ref={folderNameInputRef}
+                            value={folderEditMode.name}
+                            onChange={(e) => setFolderEditMode({ ...folderEditMode, name: e.target.value })}
+                            onBlur={async () => {
+                              if (folderEditMode.name.trim() && folderEditMode.name !== item.label) {
+                                await renameProjectFolder(folderEditMode.id, folderEditMode.name);
+                              }
+                              setFolderEditMode(null);
+                            }}
+                            onKeyDown={async (e) => {
+                              if (e.key === 'Enter') {
+                                if (folderEditMode.name.trim() && folderEditMode.name !== item.label) {
+                                  await renameProjectFolder(folderEditMode.id, folderEditMode.name);
+                                }
+                                setFolderEditMode(null);
+                              } else if (e.key === 'Escape') {
+                                setFolderEditMode(null);
+                              }
+                            }}
+                            className="text-sm font-medium bg-black/50 border border-white/20 rounded px-2 py-0.5 text-white flex-1 outline-none"
+                          />
+                        ) : (
+                          <span className="text-sm font-medium flex-1">{item.label}</span>
+                        )}
+                        {item.isFolder && (
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFolderEditMode({ id: item.id, name: item.label });
+                              }}
+                              className="p-0.5 hover:bg-white/10 rounded"
+                              title="Rename folder"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                await archiveProjectFolder(item.id);
+                              }}
+                              className="p-0.5 hover:bg-white/10 rounded"
+                              title="Archive folder"
+                            >
+                              <Archive className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+
+                {/* Add Folder Button */}
+                <div className="px-3 py-2">
                   <button
-                    key={item.id}
-                    onClick={() => setActiveView(item.id)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
-                      activeView === item.id
-                       ? "nav-active"
-                        : "text-white/50 hover:bg-white/5 hover:text-white/90"
-                    }`}
+                    onClick={async () => {
+                      const newFolder = await createProjectFolder({
+                        name: 'New Project',
+                        type: 'workspace',
+                        parentId: undefined
+                      });
+                      setActivePanel(newFolder.id);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-white/50 hover:bg-white/5 hover:text-white/90 transition-all text-sm"
                   >
-                    <item.icon className="w-4 h-4 flex-shrink-0" />
-                    <span className="text-sm font-medium">{item.label}</span>
+                    <Plus className="w-4 h-4" />
+                    <span>New Project</span>
                   </button>
-                ))}
+                </div>
+
+                {/* Workspace Switcher */}
+                <div className="px-3 py-2 border-t border-white/10 mt-2">
+                  <div className="text-xs text-white/30 mb-2 px-2">Workspaces</div>
+                  {Object.values(workspaces).map(workspace => (
+                    <button
+                      key={workspace.id}
+                      onClick={() => {
+                        // switchWorkspace(workspace.id); // Uncomment when workspace switching is implemented
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${
+                        activeWorkspaceId === workspace.id
+                          ? "bg-purple-600/20 text-purple-300 border border-purple-500/30"
+                          : "text-white/50 hover:bg-white/5 hover:text-white/90"
+                      }`}
+                    >
+                      <Monitor className="w-3.5 h-3.5" />
+                      <span className="flex-1">{workspace.name}</span>
+                      {activeWorkspaceId === workspace.id && (
+                        <CheckCircle className="w-3.5 h-3.5 text-purple-400" />
+                      )}
+                    </button>
+                  ))}
+                  <button
+                    onClick={async () => {
+                      // const newWorkspace = await createWorkspace('New Workspace'); // Uncomment when workspace creation is implemented
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-white/50 hover:bg-white/5 hover:text-white/90 transition-all text-sm mt-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>New Workspace</span>
+                  </button>
+                </div>
               </nav>
             </motion.aside>
           )}
@@ -1110,7 +1349,9 @@ export default function JarvisUI() {
             </motion.div>
           ))}
         </AnimatePresence>
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
