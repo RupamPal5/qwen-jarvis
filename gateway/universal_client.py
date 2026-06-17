@@ -221,6 +221,13 @@ class UniversalClient:
                 logger.info(f"  Circuit breaker for {provider}: {state['state']} "
                           f"(failures: {state['failure_count']})")
 
+            # Get connection pool metrics
+            pool_metrics = self.connection_pool.get_metrics()
+            for provider, metrics in pool_metrics.items():
+                logger.info(f"  Connection pool for {provider}: "
+                          f"hits={metrics['pool_hits']}, misses={metrics['pool_misses']}, "
+                          f"avg_wait={metrics['avg_wait_time']:.3f}s")
+
         except Exception as e:
             logger.error(f"Error collecting metrics: {str(e)}")
 
