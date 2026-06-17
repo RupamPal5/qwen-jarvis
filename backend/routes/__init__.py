@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from . import consensus, sensory, terminal, workspace, health
+from routes import consensus, sensory, terminal, workspace, health
 
 router = APIRouter()
 

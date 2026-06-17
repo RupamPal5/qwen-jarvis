@@ -20,7 +20,7 @@ from scipy import signal
 import speech_recognition as sr
 from gtts import gTTS
 import tempfile
-from .routes import router as api_router
+from routes import router as api_router
 
 app = FastAPI(
     title="JARVIS V5.0 Integrated Operating Matrix",

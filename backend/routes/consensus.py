@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 import logging
-from ..consensus.tri_node_engine import TriNodeConsensusEngine
+from consensus.tri_node_engine import TriNodeConsensusEngine
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
