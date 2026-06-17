@@ -1,8 +1,10 @@
 import { Router } from "express";
+import { createClient } from 'indexeddb-client';
 
 const router = Router();
 
 const OLLAMA_BASE = process.env["OLLAMA_URL"]?? "http://localhost:11434";
+const db = await createClient('ollama-db');
 
 async function ollamaFetch(path: string, options?: RequestInit) {
   const res = await fetch(`${OLLAMA_BASE}${path}`, options);
@@ -14,6 +16,7 @@ router.get("/ollama/models", async (_req, res) => {
     const r = await ollamaFetch("/api/tags");
     if (!r.ok) { res.status(502).json({ error: "Ollama unreachable" }); return; }
     const data = await r.json() as { models: unknown[] };
+    await db.put('models', data);
     res.json(data);
   } catch {
     res.status(502).json({ error: "Ollama offline" });
@@ -74,6 +77,7 @@ router.post("/ollama/chat", async (req, res) => {
             const parsed = JSON.parse(line) as { message?: { content?: string }; done?: boolean };
             if (parsed.message?.content) {
               res.write(`data: ${JSON.stringify({ token: parsed.message.content })}\n\n`);
+              await db.put('chat', parsed.message.content);
             }
             if (parsed.done) {
               res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
