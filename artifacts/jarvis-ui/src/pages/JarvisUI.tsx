@@ -506,7 +506,6 @@ export default function JarvisUI() {
 
   const metrics = useSystemMetrics();
   const notificationSystem = useNotifications();
-  const { messages, addMessage, systemStatus, setSystemStatus, setAudioAmplitude, ollamaOnline, ollamaModelCount } = useStore();
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -537,41 +536,6 @@ export default function JarvisUI() {
     };
   }, [initializePersistence, notificationSystem, reconnectWebSocket]);
 
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-  const maxReconnectAttempts = 5;
-  const folderNameInputRef = useRef<HTMLInputElement>(null);
-
-  // Apply theme on mount and when it changes
-  useEffect(() => {
-    applyTheme(theme);
-  }, [theme]);
-
-  // Focus folder name input when edit mode is activated
-  useEffect(() => {
-    if (folderEditMode && folderNameInputRef.current) {
-      folderNameInputRef.current.focus();
-      folderNameInputRef.current.select();
-    }
-  }, [folderEditMode]);
-
-  // Sync activeView with activePanel from store
-  useEffect(() => {
-    setActiveView(activePanel);
-  }, [activePanel]);
-
-  // Click-outside to close theme panel
-  useEffect(() => {
-    if (!themePanelOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (themePanelRef.current &&!themePanelRef.current.contains(e.target as Node)) {
-        setThemePanelOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [themePanelOpen]);
   
   useEffect(() => {
     // Attempt WebSocket connection — gracefully handle failure
