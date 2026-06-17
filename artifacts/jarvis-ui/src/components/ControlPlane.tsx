@@ -86,6 +86,37 @@ export function ControlPlane() {
     });
   };
   */
+
+  // Update presets to use new model IDs
+  const presets = {
+    default: {
+      name: "Default Configuration",
+      description: "Default model assignments",
+      assignments: {
+        ARCHITECT: "ollama-qwen-7b",
+        ARBITER: "gemini-2.5-flash",
+        JUDGE: "together-llama-70b"
+      }
+    },
+    coding: {
+      name: "Coding Focus",
+      description: "Optimized for coding tasks",
+      assignments: {
+        ARCHITECT: "ollama-qwen-32b",
+        ARBITER: "gemini-2.5-flash",
+        JUDGE: "mistral-codestral"
+      }
+    },
+    fast: {
+      name: "Fast Response",
+      description: "Optimized for speed",
+      assignments: {
+        ARCHITECT: "ollama-qwen-1.5b",
+        ARBITER: "gemini-2.5-flash",
+        JUDGE: "ollama-llama-3b"
+      }
+    }
+  };
   const [modelStatuses, setModelStatuses] = useState<Record<string, ModelStatus>>({});
   const [healthMetrics, setHealthMetrics] = useState<HealthMetrics>({});
   const [ws, setWs] = useState<WebSocket | null>(null);

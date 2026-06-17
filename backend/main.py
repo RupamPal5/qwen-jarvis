@@ -56,6 +56,11 @@ consensus_engine = None
 network_manager = None
 security_protocol = get_security_protocol()
 
+# Set up encryption key fallback for development
+if not os.getenv("ENCRYPTION_KEY"):
+    logger.warning("ENCRYPTION_KEY not found in environment variables, using development key")
+    os.environ["ENCRYPTION_KEY"] = "dev_key_for_testing_only_change_in_production"
+
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
 

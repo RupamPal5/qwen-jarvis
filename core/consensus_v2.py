@@ -133,13 +133,12 @@ class ConsensusEngineV2:
         self.pending_requests[cache_key] = future
 
         try:
-
-        result: Dict[str, Any] = {
-            "status": "error",
-            "request_id": request_id,
-            "timestamp": datetime.now().isoformat(),
-            "steps": []
-        }
+            result: Dict[str, Any] = {
+                "status": "error",
+                "request_id": request_id,
+                "timestamp": datetime.now().isoformat(),
+                "steps": []
+            }
 
         # Record metrics
         metrics = {
