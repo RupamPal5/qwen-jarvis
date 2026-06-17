@@ -1,6 +1,7 @@
 import { Router, Multer } from "express";
 import { createClient } from 'indexeddb-client';
 import multer from 'multer';
+import logger from '../logger';
 
 const router = Router();
 
@@ -9,8 +10,13 @@ const db = await createClient('ollama-db');
 const upload = multer({ dest: './uploads/' });
 
 async function ollamaFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${OLLAMA_BASE}${path}`, options);
-  return res;
+  try {
+    const res = await fetch(`${OLLAMA_BASE}${path}`, options);
+    return res;
+  } catch (error) {
+    logger.error('Error fetching from Ollama:', error);
+    throw error;
+  }
 }
 
 router.post("/api/v1/sensory/ingestion", upload.array('files', 12), async (req, res) => {
@@ -90,6 +96,7 @@ router.post("/ollama/chat", async (req, res) => {
             if (parsed.message?.content) {
               res.write(`data: ${JSON.stringify({ token: parsed.message.content })}\n\n`);
               await db.put('chat', parsed.message.content);
+              logger.info(`Chat message received: ${parsed.message.content}`);
             }
             if (parsed.done) {
               res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
@@ -109,6 +116,7 @@ router.post("/ollama/chat", async (req, res) => {
       res.json(data);
     }
   } catch (err) {
+    logger.error('Error handling chat request:', err);
     res.status(502).json({ error: "Ollama offline" });
   }
 });
