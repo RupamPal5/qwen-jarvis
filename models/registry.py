@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Union, Any
 from pydantic import BaseModel, Field, validator
 import logging
 import os
+from security.encryption import get_api_key_encryptor
 
 logger = logging.getLogger(__name__)
 
@@ -68,12 +69,27 @@ class ModelRegistry:
             # Validate and load models
             models_data = config.get("models", {})
             self.models = {}
+            encryptor = get_api_key_encryptor()
 
             for model_id, model_data in models_data.items():
                 try:
                     # Ensure model_id is included in the model data
                     if "model_id" not in model_data:
                         model_data["model_id"] = model_id
+
+                    # Decrypt API key if present
+                    if "api_key" in model_data and model_data["api_key"]:
+                        try:
+                            decrypted_key = encryptor.decrypt_api_key(model_data["api_key"])
+                            if decrypted_key:
+                                model_data["api_key"] = decrypted_key
+                            else:
+                                logger.warning(f"Failed to decrypt API key for model {model_id}, setting to None")
+                                model_data["api_key"] = None
+                        except Exception as e:
+                            logger.error(f"Failed to decrypt API key for model {model_id}: {str(e)}")
+                            model_data["api_key"] = None
+
                     self.models[model_id] = ModelEntry(**model_data)
                 except Exception as e:
                     logger.error(f"Failed to load model {model_id}: {str(e)}")
@@ -179,7 +195,7 @@ class ModelRegistry:
                 continue
 
     def save_registry(self) -> bool:
-        """Save current registry to YAML file.
+        """Save current registry to YAML file with encrypted API keys.
 
         Returns:
             bool: True if save was successful, False otherwise
@@ -188,12 +204,27 @@ class ModelRegistry:
             # Ensure config directory exists
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
 
-            config = {
-                "models": {
-                    model_id: model.dict(exclude={"model_id"})
-                    for model_id, model in self.models.items()
-                }
-            }
+            encryptor = get_api_key_encryptor()
+            config = {"models": {}}
+
+            for model_id, model in self.models.items():
+                # Create a copy of the model data to avoid modifying the original
+                model_data = model.dict(exclude={"model_id"})
+
+                # Encrypt API key if present
+                if "api_key" in model_data and model_data["api_key"]:
+                    try:
+                        encrypted_key = encryptor.encrypt_api_key(model_data["api_key"])
+                        if encrypted_key:
+                            model_data["api_key"] = encrypted_key
+                        else:
+                            logger.warning(f"Failed to encrypt API key for model {model_id}, setting to None")
+                            model_data["api_key"] = None
+                    except Exception as e:
+                        logger.error(f"Failed to encrypt API key for model {model_id}: {str(e)}")
+                        model_data["api_key"] = None
+
+                config["models"][model_id] = model_data
 
             with open(self.config_path, 'w') as f:
                 yaml.dump(config, f, sort_keys=False)
@@ -205,7 +236,7 @@ class ModelRegistry:
             return False
 
     def add_model(self, model: ModelEntry) -> bool:
-        """Add a new model to the registry.
+        """Add a new model to the registry with encrypted API key.
 
         Args:
             model: ModelEntry object to add
@@ -218,14 +249,27 @@ class ModelRegistry:
             return False
 
         try:
-            self.models[model.model_id] = model
+            # Create a copy to avoid modifying the original
+            model_copy = model.copy()
+
+            # Encrypt API key if present
+            if model_copy.api_key:
+                encryptor = get_api_key_encryptor()
+                encrypted_key = encryptor.encrypt_api_key(model_copy.api_key)
+                if encrypted_key:
+                    model_copy.api_key = encrypted_key
+                else:
+                    logger.warning(f"Failed to encrypt API key for model {model.model_id}, setting to None")
+                    model_copy.api_key = None
+
+            self.models[model.model_id] = model_copy
             return self.save_registry()
         except Exception as e:
             logger.error(f"Failed to add model {model.model_id}: {str(e)}")
             return False
 
     def update_model(self, model_id: str, updates: Dict[str, Any]) -> bool:
-        """Update an existing model in the registry.
+        """Update an existing model in the registry with encrypted API key.
 
         Args:
             model_id: ID of the model to update
@@ -240,6 +284,21 @@ class ModelRegistry:
 
         try:
             model = self.models[model_id]
+
+            # Handle API key update specially to ensure encryption
+            if "api_key" in updates:
+                encryptor = get_api_key_encryptor()
+                if updates["api_key"]:
+                    encrypted_key = encryptor.encrypt_api_key(updates["api_key"])
+                    if encrypted_key:
+                        setattr(model, "api_key", encrypted_key)
+                    else:
+                        logger.warning(f"Failed to encrypt API key for model {model_id}, keeping existing value")
+                else:
+                    setattr(model, "api_key", None)
+                del updates["api_key"]  # Remove so we don't process it again
+
+            # Apply other updates
             for key, value in updates.items():
                 if hasattr(model, key):
                     setattr(model, key, value)

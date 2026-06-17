@@ -37,13 +37,14 @@ app = FastAPI(
     version="5.0.0"
 )
 
-# Configure CORS
+# Configure CORS - restrict to only the frontend origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+    max_age=86400,  # Cache preflight response for 24 hours
 )
 
 # Initialize core components
@@ -85,9 +86,80 @@ async def initialize_services() -> None:
         logger.critical(f"Failed to initialize core services: {str(e)}", exc_info=True)
         raise
 
+# Configure request size limit
+from fastapi.middleware import Middleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+
+# Add middleware for request size limiting
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["localhost", "127.0.0.1"]
+)
+
+# Configure request size limit and validation
+@app.middleware("http")
+async def limit_request_size(request: Request, call_next):
+    """Limit request body size to 1MB globally and validate requests."""
+    # Limit request size
+    if request.url.path.startswith("/api/"):
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > 1_000_000:  # 1MB limit
+            return JSONResponse(
+                status_code=413,
+                content={"detail": "Request body too large. Maximum size is 1MB."}
+            )
+
+    # Validate API requests
+    if request.url.path.startswith("/api/") and request.method in ["POST", "PUT", "PATCH"]:
+        try:
+            from gateway.validator import get_request_validator
+            validator = get_request_validator()
+
+            # Get client IP for rate limiting
+            client_ip = request.client.host if request.client else "unknown"
+
+            # Check if this is a model-related request
+            if "/api/models/" in request.url.path or "/api/consensus/" in request.url.path:
+                # Parse request body
+                body = await request.body()
+                if body:
+                    try:
+                        data = json.loads(body)
+                        # Sanitize input
+                        sanitized_data = validator.sanitize_input(data)
+
+                        # Validate based on endpoint
+                        if "/api/models/assign" in request.url.path:
+                            is_valid, error_msg = validator.validate_model_assignment_request(sanitized_data, client_ip)
+                            if not is_valid:
+                                return JSONResponse(
+                                    status_code=400,
+                                    content={"detail": error_msg}
+                                )
+                        elif "/api/consensus/execute" in request.url.path:
+                            if not validator._validate_message_content(sanitized_data.get("input", "")):
+                                return JSONResponse(
+                                    status_code=400,
+                                    content={"detail": "Input contains potentially dangerous patterns"}
+                                )
+
+                    except json.JSONDecodeError:
+                        # If we can't parse the JSON, let the endpoint handle it
+                        pass
+        except Exception as e:
+            logger.error(f"Request validation middleware error: {str(e)}")
+            # Continue with the request even if validation fails
+
+    return await call_next(request)
+
 # Initialize async components
 @app.on_event("startup")
 async def startup_event():
+    # Set up global error handling
+    from core.error_handler import get_error_handler
+    error_handler = get_error_handler()
+    error_handler.setup_global_exception_handling()
+
     # Run preflight checks before starting services
     from core.preflight import run_preflight_checks
     preflight_passed = await run_preflight_checks()

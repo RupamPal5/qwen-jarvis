@@ -2,13 +2,21 @@ import httpx
 import logging
 from typing import Dict, Optional, Union, Any, List
 from models.registry import ModelEntry
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import time
 import asyncio
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+from enum import Enum
+from core.error_handler import get_error_handler
 
 logger = logging.getLogger(__name__)
+
+class CircuitState(Enum):
+    """Circuit breaker states."""
+    CLOSED = "CLOSED"
+    OPEN = "OPEN"
+    HALF_OPEN = "HALF_OPEN"
 
 class ModelRequest(BaseModel):
     """Represents a request to be sent to a model."""
@@ -59,6 +67,70 @@ class ModelResponse(BaseModel):
             }
         }
 
+class CircuitBreaker:
+    """Circuit breaker pattern implementation for model providers."""
+
+    def __init__(self, max_failures: int = 5, reset_timeout: int = 30):
+        """Initialize the circuit breaker.
+
+        Args:
+            max_failures: Maximum number of consecutive failures before opening circuit
+            reset_timeout: Time in seconds to wait before trying to recover
+        """
+        self.max_failures = max_failures
+        self.reset_timeout = reset_timeout
+        self.state = CircuitState.CLOSED
+        self.failure_count = 0
+        self.last_failure_time = None
+        self.next_attempt_time = None
+
+    def record_success(self) -> None:
+        """Record a successful call."""
+        if self.state != CircuitState.CLOSED:
+            logger.info(f"Circuit breaker: {self.state.value} -> CLOSED (success)")
+        self.state = CircuitState.CLOSED
+        self.failure_count = 0
+        self.last_failure_time = None
+        self.next_attempt_time = None
+
+    def record_failure(self) -> None:
+        """Record a failed call."""
+        self.failure_count += 1
+        self.last_failure_time = datetime.now()
+
+        if self.failure_count >= self.max_failures:
+            self._open_circuit()
+
+    def _open_circuit(self) -> None:
+        """Open the circuit."""
+        if self.state != CircuitState.OPEN:
+            logger.warning(f"Circuit breaker: {self.state.value} -> OPEN (too many failures)")
+        self.state = CircuitState.OPEN
+        self.next_attempt_time = datetime.now() + timedelta(seconds=self.reset_timeout)
+
+    def is_call_allowed(self) -> bool:
+        """Check if a call is allowed based on circuit state."""
+        if self.state == CircuitState.CLOSED:
+            return True
+        elif self.state == CircuitState.OPEN:
+            if datetime.now() >= self.next_attempt_time:
+                logger.info(f"Circuit breaker: OPEN -> HALF_OPEN (attempting recovery)")
+                self.state = CircuitState.HALF_OPEN
+                return True
+            return False
+        elif self.state == CircuitState.HALF_OPEN:
+            return True
+        return False
+
+    def get_state(self) -> Dict[str, Any]:
+        """Get the current circuit breaker state."""
+        return {
+            "state": self.state.value,
+            "failure_count": self.failure_count,
+            "last_failure_time": self.last_failure_time.isoformat() if self.last_failure_time else None,
+            "next_attempt_time": self.next_attempt_time.isoformat() if self.next_attempt_time else None
+        }
+
 class UniversalClient:
     """Universal client for calling different model providers with consistent interface."""
 
@@ -75,6 +147,8 @@ class UniversalClient:
         self.max_retries = 3
         self.retry_delay = 1.0
         self.request_metrics: List[Dict[str, Any]] = []
+        self.circuit_breakers: Dict[str, CircuitBreaker] = {}  # provider -> CircuitBreaker
+        self.error_handler = get_error_handler()
 
     async def get_client(self, provider: str) -> httpx.AsyncClient:
         """Get or create an HTTP client for a provider.
@@ -112,7 +186,7 @@ class UniversalClient:
             raise
 
     async def call_model(self, model: ModelEntry, request: ModelRequest) -> ModelResponse:
-        """Call a model with retry logic and fallback.
+        """Call a model with retry logic, fallback, and circuit breaker protection.
 
         Args:
             model: The model to call
@@ -136,10 +210,26 @@ class UniversalClient:
             "attempts": 0,
             "success": False,
             "latency": 0,
-            "error": None
+            "error": None,
+            "circuit_state": None
         }
 
         try:
+            # Check circuit breaker state
+            circuit_breaker = self._get_circuit_breaker(model.provider)
+            if not circuit_breaker.is_call_allowed():
+                error_msg = f"Circuit breaker is OPEN for provider {model.provider}"
+                request_metric["error"] = error_msg
+                request_metric["circuit_state"] = circuit_breaker.get_state()
+                self.request_metrics.append(request_metric)
+
+                # Try fallback model if available
+                fallback_response = await self._try_fallback_model(request)
+                if fallback_response:
+                    return fallback_response
+                else:
+                    raise Exception(error_msg)
+
             for attempt in range(self.max_retries):
                 try:
                     if model.is_local:
@@ -151,16 +241,22 @@ class UniversalClient:
                     request_metric.update({
                         "attempts": attempt + 1,
                         "success": True,
-                        "latency": time.time() - start_time
+                        "latency": time.time() - start_time,
+                        "circuit_state": circuit_breaker.get_state()
                     })
                     self.request_metrics.append(request_metric)
 
+                    # Record success in circuit breaker
+                    circuit_breaker.record_success()
                     return response
 
                 except Exception as e:
                     last_error = e
                     logger.warning(f"Attempt {attempt + 1} failed for {model.model_id}: {str(e)}")
                     request_metric["error"] = str(e)
+
+                    # Record failure in circuit breaker
+                    circuit_breaker.record_failure()
 
                     if attempt < self.max_retries - 1:
                         await asyncio.sleep(self.retry_delay * (attempt + 1))
@@ -172,11 +268,17 @@ class UniversalClient:
             request_metric.update({
                 "attempts": self.max_retries,
                 "latency": latency,
-                "error": error_msg
+                "error": error_msg,
+                "circuit_state": circuit_breaker.get_state()
             })
             self.request_metrics.append(request_metric)
 
-            raise Exception(error_msg)
+            # Try fallback model if available
+            fallback_response = await self._try_fallback_model(request)
+            if fallback_response:
+                return fallback_response
+            else:
+                raise Exception(error_msg)
 
         except Exception as e:
             # Record failed request
@@ -184,6 +286,10 @@ class UniversalClient:
                 request_metric["error"] = str(e)
             if not request_metric.get("latency"):
                 request_metric["latency"] = time.time() - start_time
+            if not request_metric.get("circuit_state"):
+                circuit_breaker = self._get_circuit_breaker(model.provider)
+                request_metric["circuit_state"] = circuit_breaker.get_state()
+
             self.request_metrics.append(request_metric)
 
             # Clean up old metrics to prevent memory leaks
@@ -192,8 +298,52 @@ class UniversalClient:
 
             raise
 
+    def _get_circuit_breaker(self, provider: str) -> CircuitBreaker:
+        """Get or create a circuit breaker for a provider."""
+        if provider not in self.circuit_breakers:
+            self.circuit_breakers[provider] = CircuitBreaker()
+        return self.circuit_breakers[provider]
+
+    async def _try_fallback_model(self, request: ModelRequest) -> Optional[ModelResponse]:
+        """Try to use a fallback model if the primary fails.
+
+        Args:
+            request: The original request
+
+        Returns:
+            Optional[ModelResponse]: Response from fallback model if available, None otherwise
+        """
+        try:
+            logger.warning(f"Attempting fallback for model {request.model}")
+
+            # Get fallback model (fast local model)
+            model_registry = get_model_registry()
+            fallback_model = model_registry.get_model(self.error_handler.fallback_model)
+
+            if not fallback_model or not fallback_model.is_active:
+                logger.warning("No active fallback model available")
+                return None
+
+            # Create new request for fallback model
+            fallback_request = ModelRequest(
+                model=fallback_model.model_name,
+                messages=request.messages,
+                stream=request.stream,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens
+            )
+
+            # Call fallback model
+            response = await self._call_local_model(fallback_model, fallback_request)
+            logger.info(f"Fallback to {fallback_model.model_id} successful")
+            return response
+
+        except Exception as e:
+            logger.error(f"Fallback failed: {str(e)}")
+            return None
+
     async def _call_local_model(self, model: ModelEntry, request: ModelRequest) -> ModelResponse:
-        """Call a local Ollama model.
+        """Call a local Ollama model with circuit breaker protection.
 
         Args:
             model: The local model to call
@@ -207,6 +357,11 @@ class UniversalClient:
         """
         if not model.is_local:
             raise ValueError(f"Model {model.model_id} is not a local model")
+
+        # Check circuit breaker state
+        circuit_breaker = self._get_circuit_breaker(model.provider)
+        if not circuit_breaker.is_call_allowed():
+            raise Exception(f"Circuit breaker is OPEN for provider {model.provider}")
 
         client = await self.get_client("ollama")
         endpoint = model.endpoint or "http://localhost:11434/api/chat"
@@ -242,6 +397,8 @@ class UniversalClient:
                 except:
                     error_msg = f"HTTP {response.status_code}: {response.text}"
 
+                # Record failure in circuit breaker
+                circuit_breaker.record_failure()
                 raise Exception(f"Local model {model.model_id} failed: {error_msg}")
 
             result = response.json()
@@ -257,6 +414,9 @@ class UniversalClient:
                 content = str(result)
                 tokens_used = None
 
+            # Record success in circuit breaker
+            circuit_breaker.record_success()
+
             return ModelResponse(
                 content=content,
                 model=model.model_id,
@@ -267,13 +427,15 @@ class UniversalClient:
 
         except httpx.HTTPError as e:
             logger.error(f"HTTP error calling local model {model.model_id}: {str(e)}")
+            circuit_breaker.record_failure()
             raise Exception(f"HTTP error calling local model {model.model_id}: {str(e)}")
         except Exception as e:
             logger.error(f"Error calling local model {model.model_id}: {str(e)}", exc_info=True)
+            circuit_breaker.record_failure()
             raise
 
     async def _call_cloud_model(self, model: ModelEntry, request: ModelRequest) -> ModelResponse:
-        """Call a cloud API model.
+        """Call a cloud API model with circuit breaker protection.
 
         Args:
             model: The cloud model to call
@@ -290,6 +452,11 @@ class UniversalClient:
 
         if not model.api_key:
             raise ValueError(f"API key not configured for cloud model {model.model_id}")
+
+        # Check circuit breaker state
+        circuit_breaker = self._get_circuit_breaker(model.provider)
+        if not circuit_breaker.is_call_allowed():
+            raise Exception(f"Circuit breaker is OPEN for provider {model.provider}")
 
         client = await self.get_client(model.provider)
 
@@ -386,6 +553,8 @@ class UniversalClient:
                 except:
                     error_msg = f"HTTP {response.status_code}: {response.text}"
 
+                # Record failure in circuit breaker
+                circuit_breaker.record_failure()
                 raise Exception(f"Cloud model {model.model_id} failed: {error_msg}")
 
             result = response.json()
@@ -414,6 +583,9 @@ class UniversalClient:
                 content = str(result)
                 tokens_used = None
 
+            # Record success in circuit breaker
+            circuit_breaker.record_success()
+
             return ModelResponse(
                 content=content,
                 model=model.model_id,
@@ -424,9 +596,11 @@ class UniversalClient:
 
         except httpx.HTTPError as e:
             logger.error(f"HTTP error calling cloud model {model.model_id}: {str(e)}")
+            circuit_breaker.record_failure()
             raise Exception(f"HTTP error calling cloud model {model.model_id}: {str(e)}")
         except Exception as e:
             logger.error(f"Error calling cloud model {model.model_id}: {str(e)}", exc_info=True)
+            circuit_breaker.record_failure()
             raise
 
 # Global client instance

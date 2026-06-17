@@ -8,6 +8,7 @@ from gateway.universal_client import get_universal_client, ModelRequest
 import time
 from datetime import datetime
 from pydantic import BaseModel
+from core.error_handler import get_error_handler
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +156,7 @@ class NetworkManager:
         await self._check_model_recovery()
 
     async def _check_local_model(self, model: ModelEntry) -> Dict[str, Any]:
-        """Check if a local model is available.
+        """Check if a local model is available with error handling.
 
         Args:
             model: The local model to check
@@ -194,11 +195,13 @@ class NetworkManager:
                 max_tokens=5
             )
 
-            response = await self.universal_client._call_local_model(model, test_request)
-            if not response.content or "OK" not in response.content.upper():
-                return {"available": False, "error": "Model did not respond with expected content"}
-
-            return {"available": True}
+            try:
+                response = await self.universal_client._call_local_model(model, test_request)
+                if not response.content or "OK" not in response.content.upper():
+                    return {"available": False, "error": "Model did not respond with expected content"}
+                return {"available": True}
+            except Exception as e:
+                return {"available": False, "error": f"Test request failed: {str(e)}"}
 
         except subprocess.SubprocessError as e:
             return {"available": False, "error": f"Subprocess error: {str(e)}"}
@@ -207,7 +210,7 @@ class NetworkManager:
             return {"available": False, "error": str(e)}
 
     async def _check_cloud_model(self, model: ModelEntry) -> Dict[str, Any]:
-        """Check if a cloud model is available.
+        """Check if a cloud model is available with error handling.
 
         Args:
             model: The cloud model to check
@@ -226,11 +229,13 @@ class NetworkManager:
                 max_tokens=5
             )
 
-            response = await self.universal_client._call_cloud_model(model, test_request)
-            if not response.content or "OK" not in response.content.upper():
-                return {"available": False, "error": "Model did not respond with expected content"}
-
-            return {"available": True}
+            try:
+                response = await self.universal_client._call_cloud_model(model, test_request)
+                if not response.content or "OK" not in response.content.upper():
+                    return {"available": False, "error": "Model did not respond with expected content"}
+                return {"available": True}
+            except Exception as e:
+                return {"available": False, "error": f"Test request failed: {str(e)}"}
 
         except Exception as e:
             logger.error(f"Cloud model check failed for {model.model_id}: {str(e)}", exc_info=True)
@@ -303,29 +308,9 @@ class NetworkManager:
                 except Exception as e:
                     logger.error(f"Error checking recovery status for model {model_id}: {str(e)}")
 
-    def _record_health_metrics(self, model_id: str, available: bool, latency: float, error: Optional[str]) -> None:
-        """Record health metrics for a model.
-
-        Args:
-            model_id: The ID of the model
-            available: Whether the model is available
-            latency: The response latency in seconds
-            error: Any error that occurred
-        """
-        metric = {
-            "model_id": model_id,
-            "timestamp": datetime.now().isoformat(),
-            "available": available,
-            "latency": latency,
-            "error": error,
-            "is_local": self.model_registry.get_model(model_id)?.is_local or False
-        }
-
-        self.health_metrics.append(metric)
-
-        # Clean up old metrics
-        if len(self.health_metrics) > 1000:
-            self.health_metrics = self.health_metrics[-1000:]
+    def get_circuit_breaker_states(self) -> Dict[str, Dict[str, Any]]:
+        """Get the current state of all circuit breakers."""
+        return {provider: breaker.get_state() for provider, breaker in self.circuit_breakers.items()}
 
     def get_model_status(self, model_id: str) -> Optional[ModelStatus]:
         """Get the current status of a model.
@@ -339,7 +324,7 @@ class NetworkManager:
         return self.model_status.get(model_id)
 
     async def download_local_model(self, model_id: str) -> bool:
-        """Download a local model using Ollama.
+        """Download a local model using Ollama with error handling.
 
         Args:
             model_id: The ID of the model to download
@@ -358,32 +343,37 @@ class NetworkManager:
                 logger.error("Cannot download model: Ollama service not running")
                 return False
 
-            result = subprocess.run(
-                ["ollama", "pull", model.model_name],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=300  # 5 minute timeout
-            )
-            logger.info(f"Successfully downloaded model {model.model_name}")
+            try:
+                result = subprocess.run(
+                    ["ollama", "pull", model.model_name],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=300  # 5 minute timeout
+                )
+                logger.info(f"Successfully downloaded model {model.model_name}")
 
-            # Update model status
-            if model_id in self.model_status:
-                self.model_status[model_id].available = True
-                self.model_status[model_id].consecutive_failures = 0
-                self.model_status[model_id].last_success = datetime.now().isoformat()
-                self.model_status[model_id].is_disabled = False
-                self.model_status[model_id].disabled_until = None
+                # Update model status
+                if model_id in self.model_status:
+                    self.model_status[model_id].available = True
+                    self.model_status[model_id].consecutive_failures = 0
+                    self.model_status[model_id].last_success = datetime.now().isoformat()
+                    self.model_status[model_id].is_disabled = False
+                    self.model_status[model_id].disabled_until = None
 
-            return True
-        except subprocess.TimeoutExpired:
-            logger.error(f"Timeout while downloading model {model.model_name}")
-            return False
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to download model {model.model_name}: {e.stderr}")
-            return False
+                return True
+            except subprocess.TimeoutExpired:
+                logger.error(f"Timeout while downloading model {model.model_name}")
+                return False
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Failed to download model {model.model_name}: {e.stderr}")
+                return False
+            except Exception as e:
+                logger.error(f"Error downloading model {model.model_name}: {str(e)}", exc_info=True)
+                return False
+
         except Exception as e:
-            logger.error(f"Error downloading model {model.model_name}: {str(e)}", exc_info=True)
+            logger.error(f"Unexpected error downloading model {model_id}: {str(e)}", exc_info=True)
             return False
 
     async def start_local_model(self, model_id: str) -> bool:

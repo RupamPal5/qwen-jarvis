@@ -4,6 +4,8 @@ from typing import Dict, Optional, List, Any
 from models.registry import ModelEntry
 from core.role_manager import get_role_manager
 from gateway.universal_client import ModelRequest, ModelResponse, get_universal_client
+from gateway.validator import get_request_validator
+from core.error_handler import get_error_handler
 import asyncio
 from datetime import datetime
 from pydantic import BaseModel
@@ -76,6 +78,12 @@ class ConsensusEngineV2:
             "success": False
         }
 
+        # Validate input
+        validator = get_request_validator()
+        if not validator._validate_message_content(user_input):
+            result["error"] = "Input contains potentially dangerous patterns"
+            return result
+
         try:
             logger.info(f"Starting consensus execution for request {request_id}")
 
@@ -92,113 +100,199 @@ class ConsensusEngineV2:
 
             # Step 1: Architect generates the initial plan
             step1_start = time.time()
-            architect_response = await self._call_architect(
-                user_input,
-                architect_model,
-                workspace_id
-            )
-            step1_duration = time.time() - step1_start
+            try:
+                architect_response = await self._call_architect(
+                    user_input,
+                    architect_model,
+                    workspace_id
+                )
+                step1_duration = time.time() - step1_start
 
-            result["steps"].append({
-                "step": "architect",
-                "model": architect_model.model_id,
-                "status": "success",
-                "duration": step1_duration,
-                "timestamp": datetime.now().isoformat()
-            })
+                result["steps"].append({
+                    "step": "architect",
+                    "model": architect_model.model_id,
+                    "status": "success",
+                    "duration": step1_duration,
+                    "timestamp": datetime.now().isoformat()
+                })
 
-            metrics["steps"].append({
-                "step": "architect",
-                "model": architect_model.model_id,
-                "duration": step1_duration,
-                "timestamp": datetime.now().isoformat()
-            })
+                metrics["steps"].append({
+                    "step": "architect",
+                    "model": architect_model.model_id,
+                    "duration": step1_duration,
+                    "timestamp": datetime.now().isoformat()
+                })
+            except Exception as e:
+                step1_duration = time.time() - step1_start
+                result["steps"].append({
+                    "step": "architect",
+                    "model": architect_model.model_id,
+                    "status": "failed",
+                    "duration": step1_duration,
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e)
+                })
+
+                metrics["steps"].append({
+                    "step": "architect",
+                    "model": architect_model.model_id,
+                    "duration": step1_duration,
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e)
+                })
+
+                result["error"] = f"Architect step failed: {str(e)}"
+                return result
 
             # Step 2: Arbiter audits the plan
             step2_start = time.time()
-            audit_result = await self._call_arbiter(
-                architect_response.content,
-                arbiter_model,
-                workspace_id
-            )
-            step2_duration = time.time() - step2_start
+            try:
+                audit_result = await self._call_arbiter(
+                    architect_response.content,
+                    arbiter_model,
+                    workspace_id
+                )
+                step2_duration = time.time() - step2_start
 
-            result["steps"].append({
-                "step": "arbiter",
-                "model": arbiter_model.model_id,
-                "status": "success" if audit_result.get("is_safe", False) else "rejected",
-                "duration": step2_duration,
-                "timestamp": datetime.now().isoformat()
-            })
-
-            metrics["steps"].append({
-                "step": "arbiter",
-                "model": arbiter_model.model_id,
-                "duration": step2_duration,
-                "timestamp": datetime.now().isoformat()
-            })
-
-            if not audit_result.get("is_safe", False):
-                result.update({
-                    "status": "rejected",
-                    "reason": "Security audit failed",
-                    "details": audit_result.get("details", ""),
-                    "audit_result": audit_result
+                result["steps"].append({
+                    "step": "arbiter",
+                    "model": arbiter_model.model_id,
+                    "status": "success" if audit_result.get("is_safe", False) else "rejected",
+                    "duration": step2_duration,
+                    "timestamp": datetime.now().isoformat()
                 })
+
+                metrics["steps"].append({
+                    "step": "arbiter",
+                    "model": arbiter_model.model_id,
+                    "duration": step2_duration,
+                    "timestamp": datetime.now().isoformat()
+                })
+
+                if not audit_result.get("is_safe", False):
+                    result.update({
+                        "status": "rejected",
+                        "reason": "Security audit failed",
+                        "details": audit_result.get("details", ""),
+                        "audit_result": audit_result
+                    })
+                    return result
+            except Exception as e:
+                step2_duration = time.time() - step2_start
+                result["steps"].append({
+                    "step": "arbiter",
+                    "model": arbiter_model.model_id,
+                    "status": "failed",
+                    "duration": step2_duration,
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e)
+                })
+
+                metrics["steps"].append({
+                    "step": "arbiter",
+                    "model": arbiter_model.model_id,
+                    "duration": step2_duration,
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e)
+                })
+
+                result["error"] = f"Arbiter step failed: {str(e)}"
                 return result
 
             # Step 3: Get human authorization
             step3_start = time.time()
-            authorized = await self._get_human_authorization(
-                user_input,
-                architect_response.content,
-                workspace_id
-            )
-            step3_duration = time.time() - step3_start
+            try:
+                authorized = await self._get_human_authorization(
+                    user_input,
+                    architect_response.content,
+                    workspace_id
+                )
+                step3_duration = time.time() - step3_start
 
-            result["steps"].append({
-                "step": "authorization",
-                "status": "success" if authorized else "rejected",
-                "duration": step3_duration,
-                "timestamp": datetime.now().isoformat()
-            })
-
-            metrics["steps"].append({
-                "step": "authorization",
-                "duration": step3_duration,
-                "timestamp": datetime.now().isoformat()
-            })
-
-            if not authorized:
-                result.update({
-                    "status": "rejected",
-                    "reason": "User authorization denied"
+                result["steps"].append({
+                    "step": "authorization",
+                    "status": "success" if authorized else "rejected",
+                    "duration": step3_duration,
+                    "timestamp": datetime.now().isoformat()
                 })
+
+                metrics["steps"].append({
+                    "step": "authorization",
+                    "duration": step3_duration,
+                    "timestamp": datetime.now().isoformat()
+                })
+
+                if not authorized:
+                    result.update({
+                        "status": "rejected",
+                        "reason": "User authorization denied"
+                    })
+                    return result
+            except Exception as e:
+                step3_duration = time.time() - step3_start
+                result["steps"].append({
+                    "step": "authorization",
+                    "status": "failed",
+                    "duration": step3_duration,
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e)
+                })
+
+                metrics["steps"].append({
+                    "step": "authorization",
+                    "duration": step3_duration,
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e)
+                })
+
+                result["error"] = f"Authorization step failed: {str(e)}"
                 return result
 
             # Step 4: Judge executes the approved plan
             step4_start = time.time()
-            execution_result = await self._call_judge(
-                architect_response.content,
-                judge_model,
-                workspace_id
-            )
-            step4_duration = time.time() - step4_start
+            try:
+                execution_result = await self._call_judge(
+                    architect_response.content,
+                    judge_model,
+                    workspace_id
+                )
+                step4_duration = time.time() - step4_start
 
-            result["steps"].append({
-                "step": "judge",
-                "model": judge_model.model_id,
-                "status": "success",
-                "duration": step4_duration,
-                "timestamp": datetime.now().isoformat()
-            })
+                result["steps"].append({
+                    "step": "judge",
+                    "model": judge_model.model_id,
+                    "status": "success",
+                    "duration": step4_duration,
+                    "timestamp": datetime.now().isoformat()
+                })
 
-            metrics["steps"].append({
-                "step": "judge",
-                "model": judge_model.model_id,
-                "duration": step4_duration,
-                "timestamp": datetime.now().isoformat()
-            })
+                metrics["steps"].append({
+                    "step": "judge",
+                    "model": judge_model.model_id,
+                    "duration": step4_duration,
+                    "timestamp": datetime.now().isoformat()
+                })
+            except Exception as e:
+                step4_duration = time.time() - step4_start
+                result["steps"].append({
+                    "step": "judge",
+                    "model": judge_model.model_id,
+                    "status": "failed",
+                    "duration": step4_duration,
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e)
+                })
+
+                metrics["steps"].append({
+                    "step": "judge",
+                    "model": judge_model.model_id,
+                    "duration": step4_duration,
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e)
+                })
+
+                result["error"] = f"Judge step failed: {str(e)}"
+                return result
 
             result.update({
                 "status": "success",
@@ -241,6 +335,11 @@ class ConsensusEngineV2:
             Exception: If the call fails
         """
         try:
+            # Validate input
+            validator = get_request_validator()
+            if not validator._validate_message_content(user_input):
+                raise ValueError("Input contains potentially dangerous patterns")
+
             # Add workspace context if available
             context_content = ""
             if workspace_id:
@@ -253,7 +352,8 @@ class ConsensusEngineV2:
                         "role": "system",
                         "content": "You are the Architect. Generate a detailed execution plan. "
                                   "Output in Aider-style search/replace blocks when modifying code. "
-                                  "Be specific, thorough, and ensure your plan addresses all aspects of the request."
+                                  "Be specific, thorough, and ensure your plan addresses all aspects of the request. "
+                                  "Do not include any dangerous or malicious code patterns."
                     },
                     {
                         "role": "user",
@@ -266,6 +366,11 @@ class ConsensusEngineV2:
 
             response = await self.universal_client.call_model(model, request)
             self._track_performance(model.model_id, response.latency, response.tokens_used)
+
+            # Validate the response content
+            if not validator._validate_message_content(response.content):
+                raise ValueError("Architect response contains potentially dangerous patterns")
+
             return response
 
         except Exception as e:
@@ -287,6 +392,16 @@ class ConsensusEngineV2:
             Exception: If the call fails
         """
         try:
+            # Validate input
+            validator = get_request_validator()
+            if not validator._validate_message_content(plan):
+                return {
+                    "is_safe": False,
+                    "details": "Plan contains potentially dangerous patterns",
+                    "warnings": ["Dangerous patterns detected in plan"],
+                    "critical_issues": ["Security violation"]
+                }
+
             request = ModelRequest(
                 model=model.model_name,
                 messages=[
@@ -299,7 +414,9 @@ class ConsensusEngineV2:
                                   "4. Recursive loops or infinite recursion\n"
                                   "5. Resource exhaustion risks\n"
                                   "6. Compliance with coding standards\n"
-                                  "7. Potential side effects\n\n"
+                                  "7. Potential side effects\n"
+                                  "8. Dangerous code patterns\n"
+                                  "9. Malicious intent\n\n"
                                   "Respond with JSON format: {\n"
                                   "  'is_safe': bool,\n"
                                   "  'details': str,\n"
@@ -337,6 +454,10 @@ class ConsensusEngineV2:
                 result.setdefault("details", "No details provided")
                 result.setdefault("warnings", [])
                 result.setdefault("critical_issues", [])
+
+                # Additional security validation
+                if not result["is_safe"] and "security" in result["details"].lower():
+                    logger.warning(f"Arbiter detected security issues: {result['details']}")
 
                 return result
 
@@ -401,6 +522,11 @@ class ConsensusEngineV2:
             Exception: If the call fails
         """
         try:
+            # Validate input
+            validator = get_request_validator()
+            if not validator._validate_message_content(plan):
+                raise ValueError("Plan contains potentially dangerous patterns")
+
             # Add validation instructions to ensure only search/replace blocks are returned
             request = ModelRequest(
                 model=model.model_name,
@@ -415,7 +541,9 @@ class ConsensusEngineV2:
                                   "4. Do not include explanations, comments, or any other text\n"
                                   "5. If no changes are needed, output an empty response\n"
                                   "6. Ensure all file paths are valid and accessible\n"
-                                  "7. Validate that search blocks match the exact content in the target files\n\n"
+                                  "7. Validate that search blocks match the exact content in the target files\n"
+                                  "8. Do not generate dangerous or malicious code\n"
+                                  "9. Ensure all code follows security best practices\n\n"
                                   "Example format:\n"
                                   "path/to/file.py\n"
                                   "<<<<<<< SEARCH\n"
@@ -437,6 +565,10 @@ class ConsensusEngineV2:
 
             response = await self.universal_client.call_model(model, request)
             self._track_performance(model.model_id, response.latency, response.tokens_used)
+
+            # Validate the response content
+            if not validator._validate_message_content(response.content):
+                raise ValueError("Judge response contains potentially dangerous patterns")
 
             # Basic validation of the response format
             if not self._validate_search_replace_blocks(response.content):

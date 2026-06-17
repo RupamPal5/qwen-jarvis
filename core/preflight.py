@@ -9,6 +9,7 @@ from pathlib import Path
 import httpx
 from models.registry import get_model_registry
 from security.protocol import get_security_protocol
+from security.encryption import get_api_key_encryptor
 
 logger = logging.getLogger(__name__)
 
@@ -248,10 +249,10 @@ class PreflightCheck:
             logger.error(f"Error checking Ollama service: {str(e)}")
 
     async def check_api_keys(self) -> None:
-        """Check that required API keys are configured."""
+        """Check that required API keys are configured and properly encrypted."""
         self.checks["api_keys"] = {
             "name": "API Keys",
-            "description": "Check that required API keys are configured",
+            "description": "Check that required API keys are configured and properly encrypted",
             "checks": {}
         }
 
@@ -262,15 +263,63 @@ class PreflightCheck:
             "OPENROUTER_API_KEY": "OpenRouter API key"
         }
 
+        encryptor = get_api_key_encryptor()
+
         for env_var, description in required_keys.items():
             key_value = os.getenv(env_var)
             if key_value:
-                self.checks["api_keys"]["checks"][env_var] = {
-                    "status": "passed",
-                    "configured": True,
-                    "severity": "info"
-                }
-                logger.info(f"{description} is configured")
+                # Validate API key format
+                if env_var == "GEMINI_API_KEY":
+                    is_valid = len(key_value) > 30 and key_value.isalnum()
+                elif env_var == "MISTRAL_API_KEY":
+                    is_valid = key_value.startswith("mistral-") and len(key_value) > 20
+                elif env_var == "TOGETHER_API_KEY":
+                    is_valid = key_value.startswith("together-") and len(key_value) > 20
+                elif env_var == "OPENROUTER_API_KEY":
+                    is_valid = key_value.startswith("sk-or-") and len(key_value) > 20
+                else:
+                    is_valid = len(key_value) >= 10
+
+                if is_valid:
+                    # Test encryption/decryption
+                    try:
+                        encrypted = encryptor.encrypt_api_key(key_value)
+                        decrypted = encryptor.decrypt_api_key(encrypted) if encrypted else None
+                        encryption_works = decrypted == key_value
+
+                        self.checks["api_keys"]["checks"][env_var] = {
+                            "status": "passed" if encryption_works else "failed",
+                            "configured": True,
+                            "valid_format": True,
+                            "encryption_works": encryption_works,
+                            "severity": "info" if encryption_works else "critical"
+                        }
+
+                        if encryption_works:
+                            logger.info(f"{description} is configured and encryption works")
+                        else:
+                            self.critical_failures += 1
+                            logger.error(f"{description} encryption/decryption failed")
+                    except Exception as e:
+                        self.checks["api_keys"]["checks"][env_var] = {
+                            "status": "failed",
+                            "configured": True,
+                            "valid_format": True,
+                            "encryption_works": False,
+                            "error": str(e),
+                            "severity": "critical"
+                        }
+                        self.critical_failures += 1
+                        logger.error(f"{description} encryption test failed: {str(e)}")
+                else:
+                    self.checks["api_keys"]["checks"][env_var] = {
+                        "status": "failed",
+                        "configured": True,
+                        "valid_format": False,
+                        "severity": "warning"
+                    }
+                    self.warning_count += 1
+                    logger.warning(f"{description} has invalid format")
             else:
                 self.checks["api_keys"]["checks"][env_var] = {
                     "status": "warning",
@@ -350,10 +399,10 @@ class PreflightCheck:
                 logger.warning(f"Error checking local model {model.model_id}: {str(e)}")
 
     async def check_cloud_models(self) -> None:
-        """Check that cloud models have valid API keys."""
+        """Check that cloud models have valid API keys and can be decrypted."""
         self.checks["cloud_models"] = {
             "name": "Cloud Models",
-            "description": "Check that cloud models have valid API keys",
+            "description": "Check that cloud models have valid API keys and can be decrypted",
             "checks": {}
         }
 
@@ -383,28 +432,41 @@ class PreflightCheck:
             try:
                 decrypted_key = self.security_protocol.decrypt_api_key(model.api_key)
                 if decrypted_key:
-                    self.checks["cloud_models"]["checks"][model.model_id] = {
-                        "status": "passed",
-                        "message": "API key is valid",
-                        "severity": "info"
-                    }
-                    logger.info(f"Cloud model {model.model_id} API key is valid")
+                    # Validate the decrypted key format
+                    encryptor = get_api_key_encryptor()
+                    is_valid = encryptor.validate_api_key(decrypted_key, model.provider)
+
+                    if is_valid:
+                        self.checks["cloud_models"]["checks"][model.model_id] = {
+                            "status": "passed",
+                            "message": "API key is valid and properly encrypted",
+                            "severity": "info"
+                        }
+                        logger.info(f"Cloud model {model.model_id} API key is valid and properly encrypted")
+                    else:
+                        self.checks["cloud_models"]["checks"][model.model_id] = {
+                            "status": "failed",
+                            "message": "API key format is invalid",
+                            "severity": "warning"
+                        }
+                        self.warning_count += 1
+                        logger.warning(f"Cloud model {model.model_id} API key format is invalid")
                 else:
                     self.checks["cloud_models"]["checks"][model.model_id] = {
                         "status": "failed",
                         "message": "API key decryption failed",
-                        "severity": "warning"
+                        "severity": "critical"
                     }
-                    self.warning_count += 1
-                    logger.warning(f"Cloud model {model.model_id} API key decryption failed")
+                    self.critical_failures += 1
+                    logger.error(f"Cloud model {model.model_id} API key decryption failed")
             except Exception as e:
                 self.checks["cloud_models"]["checks"][model.model_id] = {
                     "status": "failed",
                     "message": f"API key validation failed: {str(e)}",
-                    "severity": "warning"
+                    "severity": "critical"
                 }
-                self.warning_count += 1
-                logger.warning(f"Cloud model {model.model_id} API key validation failed: {str(e)}")
+                self.critical_failures += 1
+                logger.error(f"Cloud model {model.model_id} API key validation failed: {str(e)}")
 
     def check_model_assignments(self) -> None:
         """Check that all roles have models assigned."""

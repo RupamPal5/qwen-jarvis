@@ -2,12 +2,14 @@ import logging
 import hashlib
 import os
 import json
+import re
 from typing import Dict, Optional, Any, List
 from cryptography.fernet import Fernet, InvalidToken
 import time
 from pathlib import Path
 from datetime import datetime
 from pydantic import BaseModel
+from security.encryption import get_api_key_encryptor
 
 logger = logging.getLogger(__name__)
 
@@ -44,24 +46,20 @@ class SecurityProtocol:
         This creates a Fernet key for encrypting sensitive data like API keys.
         """
         try:
-            if self.key_file.exists():
-                with open(self.key_file, 'rb') as f:
-                    key = f.read()
+            # Use the new API key encryptor instead
+            encryptor = get_api_key_encryptor()
+            if encryptor.fernet:
+                self.fernet = encryptor.fernet
+                logger.info("Encryption initialized successfully using API key encryptor")
             else:
-                # Ensure directory exists
-                self.key_file.parent.mkdir(parents=True, exist_ok=True)
-                key = Fernet.generate_key()
-                with open(self.key_file, 'wb') as f:
-                    f.write(key)
-
-            self.fernet = Fernet(key)
-            logger.info("Encryption initialized successfully")
+                logger.error("Failed to initialize encryption: API key encryptor not available")
+                raise Exception("API key encryptor not available")
         except Exception as e:
             logger.error(f"Failed to initialize encryption: {str(e)}", exc_info=True)
             raise
 
     def encrypt_api_key(self, api_key: str) -> str:
-        """Encrypt an API key.
+        """Encrypt an API key using the API key encryptor.
 
         Args:
             api_key: The API key to encrypt
@@ -76,17 +74,17 @@ class SecurityProtocol:
             return ""
 
         try:
-            encrypted = self.fernet.encrypt(api_key.encode())
-            return encrypted.decode()
-        except InvalidToken as e:
-            logger.error(f"Invalid encryption token: {str(e)}")
-            raise ValueError("Encryption token is invalid")
+            encryptor = get_api_key_encryptor()
+            encrypted = encryptor.encrypt_api_key(api_key)
+            if encrypted is None:
+                raise ValueError("Encryption failed")
+            return encrypted
         except Exception as e:
             logger.error(f"Failed to encrypt API key: {str(e)}", exc_info=True)
             raise ValueError(f"Failed to encrypt API key: {str(e)}")
 
     def decrypt_api_key(self, encrypted_key: str) -> str:
-        """Decrypt an API key.
+        """Decrypt an API key using the API key encryptor.
 
         Args:
             encrypted_key: The encrypted API key
@@ -101,11 +99,11 @@ class SecurityProtocol:
             return ""
 
         try:
-            decrypted = self.fernet.decrypt(encrypted_key.encode())
-            return decrypted.decode()
-        except InvalidToken as e:
-            logger.error(f"Invalid encryption token during decryption: {str(e)}")
-            raise ValueError("Encryption token is invalid or data is corrupted")
+            encryptor = get_api_key_encryptor()
+            decrypted = encryptor.decrypt_api_key(encrypted_key)
+            if decrypted is None:
+                raise ValueError("Decryption failed")
+            return decrypted
         except Exception as e:
             logger.error(f"Failed to decrypt API key: {str(e)}", exc_info=True)
             raise ValueError(f"Failed to decrypt API key: {str(e)}")
