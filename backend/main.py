@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException
 from typing import Dict, Optional, List
 import json
 import asyncio
@@ -6,8 +6,18 @@ import re
 import os
 import subprocess
 from pathlib import Path
+import shutil
+import uuid
+import cv2
+from PIL import Image
+import io
+import aiofiles
 
 app = FastAPI()
+
+# Configure upload directory
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
 
 class ConnectionManager:
     def __init__(self):
@@ -102,6 +112,90 @@ class SelfHealingEngine:
         }, self.client_id)
 
 manager = ConnectionManager()
+
+def extract_video_frames(video_path: Path, output_dir: Path, frame_interval: int = 30):
+    """Extract frames from video at specified intervals"""
+    cap = cv2.VideoCapture(str(video_path))
+    frame_count = 0
+    extracted_frames = []
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+            
+        if frame_count % frame_interval == 0:
+            frame_filename = output_dir / f"frame_{frame_count:06d}.jpg"
+            cv2.imwrite(str(frame_filename), frame)
+            extracted_frames.append(str(frame_filename))
+            
+        frame_count += 1
+        
+    cap.release()
+    return extracted_frames
+
+async def process_image(file_path: Path):
+    """Process image file for vision models"""
+    # For now, just return the path
+    # In a real implementation, you might want to resize, convert format, etc.
+    return str(file_path)
+
+async def process_video(file_path: Path):
+    """Process video file by extracting frames"""
+    frames_dir = UPLOAD_DIR / "frames" / file_path.stem
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    return extract_video_frames(file_path, frames_dir)
+
+async def process_document(file_path: Path):
+    """Process document files"""
+    # For text-based files, we can read and chunk them
+    # This is a placeholder implementation
+    async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
+        content = await f.read()
+    # Split into chunks (for example, by lines or fixed size)
+    chunks = [content[i:i+1000] for i in range(0, len(content), 1000)]
+    return chunks
+
+@app.post("/api/v1/sensory/ingestion")
+async def ingest_file(
+    file: UploadFile = File(...),
+    file_type: str = Form(...),
+    project_id: str = Form(...)
+):
+    # Generate unique filename
+    file_extension = Path(file.filename).suffix
+    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    file_path = UPLOAD_DIR / unique_filename
+    
+    try:
+        # Save the uploaded file
+        async with aiofiles.open(file_path, 'wb') as out_file:
+            content = await file.read()
+            await out_file.write(content)
+        
+        # Process based on file type
+        processing_result = None
+        if file_type in ['image/png', 'image/jpeg', 'image/jpg']:
+            processing_result = await process_image(file_path)
+        elif file_type in ['video/mp4', 'video/avi', 'video/mov']:
+            processing_result = await process_video(file_path)
+        elif file_type in ['text/csv', 'application/json', 'text/plain', 'application/pdf']:
+            processing_result = await process_document(file_path)
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file type")
+        
+        return {
+            "status": "success",
+            "file_id": unique_filename,
+            "original_filename": file.filename,
+            "project_id": project_id,
+            "processing_result": processing_result
+        }
+    except Exception as e:
+        # Clean up if error occurs
+        if file_path.exists():
+            file_path.unlink()
+        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
@@ -209,6 +303,32 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                             "request_id": request_id,
                             "reason": validation_output
                         }, client_id)
+            
+            elif message_type == "file_upload":
+                # Handle file upload via WebSocket (for smaller files or metadata)
+                # For larger files, use the HTTP endpoint
+                request_id = message.get("request_id")
+                file_data = message.get("file_data")
+                file_type = message.get("file_type")
+                project_id = message.get("project_id")
+                
+                # Process the file upload
+                # This is a simplified implementation
+                try:
+                    # In a real implementation, you'd save and process the file
+                    # For now, just acknowledge the upload
+                    await manager.send_personal_message({
+                        "type": "file_upload_success",
+                        "request_id": request_id,
+                        "file_id": str(uuid.uuid4()),
+                        "project_id": project_id
+                    }, client_id)
+                except Exception as e:
+                    await manager.send_personal_message({
+                        "type": "file_upload_failed",
+                        "request_id": request_id,
+                        "reason": str(e)
+                    }, client_id)
                     
     except WebSocketDisconnect:
         manager.disconnect(client_id)
