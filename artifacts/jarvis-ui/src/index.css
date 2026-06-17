@@ -1,9 +1,14 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 @import "tw-animate-css";
 @import "@xterm/xterm/css/xterm.css";
-@plugin "@tailwindcss/typography";
-
-@custom-variant dark (&:is(.dark *));
+@layer base {
+  :root {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
 
 @theme inline {
   --color-background: hsl(var(--background));
