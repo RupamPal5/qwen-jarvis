@@ -302,6 +302,7 @@ class TestSystem(unittest.TestCase):
             with patch("models.registry.ModelRegistry.config_path", self.temp_models_file):
                 role_manager = get_role_manager()
                 consensus_engine = await get_consensus_engine()
+                from core.error_handler import get_error_handler
                 error_handler = get_error_handler()
 
                 # Configure with a cloud model as architect
