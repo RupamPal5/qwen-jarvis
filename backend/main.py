@@ -20,6 +20,8 @@ from scipy import signal
 import speech_recognition as sr
 from gtts import gTTS
 import tempfile
+from consensus.tri_node_engine import TriNodeConsensusEngine
+from utils.file_utils import validate_file_path
 from routes import router as api_router
 
 app = FastAPI(

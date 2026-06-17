@@ -6,15 +6,15 @@ import logging
 from typing import Optional, Dict, List, Tuple
 from pathlib import Path
 from pydantic import BaseModel
-from ..stores import get_workspace_store
-from ..services.self_healing import SelfHealingEngine
+from stores import get_workspace_store
+from services.self_healing import SelfHealingEngine
 
 logger = logging.getLogger(__name__)
 
 # Environment variables
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-BASE_DIR = Path(__file__).parent.parent.parent  # Assuming this is in backend/consensus/
+BASE_DIR = Path(__file__).parent.parent  # backend directory
 
 class SearchReplaceBlock(BaseModel):
     file_path: str
