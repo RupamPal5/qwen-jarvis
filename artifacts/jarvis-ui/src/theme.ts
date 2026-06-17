@@ -1,4 +1,4 @@
-export type ThemeId = "cyberpunk" | "night" | "morning" | "winter" | "desert";
+export type ThemeId = "cyberpunk" | "night" | "morning" | "winter" | "desert" | "command_center";
 
 export interface Theme {
   id: ThemeId;
@@ -154,6 +154,32 @@ export const THEMES: Record<ThemeId, Theme> = {
       "--border-width":     "1px",
       "--font-display":     "'JetBrains Mono', monospace",
       "--neon-intensity":   "0",
+    },
+  },
+
+  // Command Center theme for the futuristic control plane
+  command_center: {
+    id: "command_center",
+    name: "Command Center",
+    description: "Futuristic control center theme with cyberpunk aesthetics",
+    bodyClass: "theme-command-center",
+    vars: {
+      "--bg-base":          "#040607",
+      "--bg-surface":       "rgba(20, 40, 60, 0.85)",
+      "--bg-glass":         "rgba(30, 50, 80, 0.25)",
+      "--bg-glass-border":  "rgba(0, 212, 255, 0.35)",
+      "--accent-primary":   "#00d4ff",
+      "--accent-secondary": "#4928C2",
+      "--accent-tertiary":  "#BF40FA",
+      "--text-primary":     "#E3D9FC",
+      "--text-secondary":   "rgba(227,217,252,0.72)",
+      "--text-muted":       "rgba(0, 212, 255, 0.50)",
+      "--glow-primary":     "0 0 24px rgba(0, 212, 255, 0.65), 0 0 60px rgba(0, 212, 255, 0.20)",
+      "--glow-secondary":   "0 0 20px rgba(73,40,194,0.55), 0 0 40px rgba(73,40,194,0.15)",
+      "--border-radius":    "0.75rem",
+      "--border-width":     "1px",
+      "--font-display":     "'JetBrains Mono', monospace",
+      "--neon-intensity":   "1",
     },
   },
 };

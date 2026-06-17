@@ -3,12 +3,17 @@ from typing import Dict, List, Optional
 from models.registry import ModelEntry, get_model_registry
 from core.role_manager import get_role_manager
 from pydantic import BaseModel
+import yaml
+from pathlib import Path
 
 router = APIRouter()
 
 class ModelAssignmentRequest(BaseModel):
     role: str
     model_id: str
+
+class PresetRequest(BaseModel):
+    preset_name: str
 
 @router.get("/")
 async def list_models() -> Dict[str, ModelEntry]:
@@ -33,6 +38,59 @@ async def list_cloud_models() -> List[ModelEntry]:
     """List all cloud models"""
     registry = get_model_registry()
     return registry.get_cloud_models()
+
+@router.get("/presets")
+async def list_presets() -> Dict:
+    """List available presets"""
+    try:
+        presets_path = Path("config/presets.yaml")
+        if not presets_path.exists():
+            return {"presets": {}}
+
+        with open(presets_path, 'r') as f:
+            presets = yaml.safe_load(f) or {}
+
+        return presets
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load presets: {str(e)}")
+
+@router.post("/apply-preset")
+async def apply_preset(request: PresetRequest) -> Dict:
+    """Apply a preset configuration"""
+    try:
+        presets_path = Path("config/presets.yaml")
+        if not presets_path.exists():
+            raise HTTPException(status_code=404, detail="Presets file not found")
+
+        with open(presets_path, 'r') as f:
+            presets = yaml.safe_load(f) or {}
+
+        preset = presets.get("presets", {}).get(request.preset_name)
+        if not preset:
+            raise HTTPException(status_code=404, detail="Preset not found")
+
+        assignments = preset.get("assignments", {})
+        if not assignments:
+            raise HTTPException(status_code=400, detail="Preset has no assignments")
+
+        role_manager = get_role_manager()
+
+        # Apply each assignment
+        for role, model_id in assignments.items():
+            success = role_manager.assign_role(role, model_id)
+            if not success:
+                raise HTTPException(status_code=400, detail=f"Failed to assign {model_id} to {role}")
+
+        return {
+            "status": "success",
+            "message": "Preset applied successfully",
+            "preset": request.preset_name,
+            "assignments": assignments
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to apply preset: {str(e)}")
 
 @router.get("/roles")
 async def get_role_assignments() -> Dict[str, Optional[str]]:

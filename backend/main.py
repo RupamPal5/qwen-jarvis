@@ -97,6 +97,11 @@ class ConnectionManager:
                     "status": status
                 }, client_id)
 
+    async def broadcast_to_all(self, message: dict):
+        """Broadcast a message to all connected clients"""
+        for websocket in self.active_connections.values():
+            await websocket.send_json(message)
+
 class ModelConfigRequest(BaseModel):
     architect: str
     arbiter: str
@@ -193,6 +198,45 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
     except WebSocketDisconnect:
         manager.disconnect(client_id)
+
+@app.websocket("/ws/control-plane")
+async def control_plane_websocket(websocket: WebSocket):
+    """WebSocket endpoint for control plane real-time updates"""
+    await websocket.accept()
+    client_id = f"control-plane-{id(websocket)}"
+
+    try:
+        while True:
+            # Receive message from client
+            data = await websocket.receive_text()
+            message = json.loads(data)
+
+            # Handle control plane specific messages
+            if message.get("type") == "subscribe_model_status":
+                model_id = message.get("model_id")
+                if model_id:
+                    # Add to manager's subscription list
+                    if model_id not in manager.model_status_subscribers:
+                        manager.model_status_subscribers[model_id] = []
+                    if client_id not in manager.model_status_subscribers[model_id]:
+                        manager.model_status_subscribers[model_id].append(client_id)
+
+                    # Send current status
+                    status = network_manager.get_model_status(model_id)
+                    if status:
+                        await websocket.send_json({
+                            "type": "model_status_update",
+                            "model_id": model_id,
+                            "status": status
+                        })
+
+    except WebSocketDisconnect:
+        # Clean up subscriptions
+        for model_id, subscribers in list(manager.model_status_subscribers.items()):
+            if client_id in subscribers:
+                subscribers.remove(client_id)
+                if not subscribers:
+                    del manager.model_status_subscribers[model_id]
 
 
 class DiffEngine:
