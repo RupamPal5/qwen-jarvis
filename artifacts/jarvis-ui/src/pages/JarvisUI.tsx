@@ -1147,6 +1147,35 @@ export default function JarvisUI() {
     return icons[type] || Folder;
   }
 
+  const notifyConfigUpdated = () => {
+    // Notify via WebSocket if available
+    if (window.WebSocket) {
+      try {
+        const wsUrl = (import.meta.env.VITE_WS_URL as string) || `ws://${window.location.host}/ws`;
+        const ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          ws.send(JSON.stringify({
+            type: "config_updated",
+            timestamp: new Date().toISOString()
+          }));
+          ws.close();
+        };
+
+        ws.onerror = () => {
+          // Fallback: dispatch custom event
+          window.dispatchEvent(new CustomEvent('configUpdated'));
+        };
+      } catch {
+        // Fallback: dispatch custom event
+        window.dispatchEvent(new CustomEvent('configUpdated'));
+      }
+    } else {
+      // Fallback: dispatch custom event
+      window.dispatchEvent(new CustomEvent('configUpdated'));
+    }
+  };
+
   return (
     <div className="jarvis-root min-h-screen font-mono overflow-hidden relative">
       {!persistenceInitialized ? (
@@ -1170,8 +1199,7 @@ export default function JarvisUI() {
           <Scene3D />
 
           <header className="jarvis-header relative z-50 flex items-center justify-between px-6 py-4">
-      )}
-        <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="p-2 hover:bg-white/5 rounded-lg transition-colors"
