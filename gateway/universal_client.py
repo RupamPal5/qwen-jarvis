@@ -1,7 +1,7 @@
 import httpx
 import logging
 from typing import Dict, Optional, Union, Any, List
-from models.registry import ModelEntry
+from models.registry import ModelEntry, get_model_registry
 from pydantic import BaseModel, Field
 import time
 import asyncio

@@ -1,5 +1,6 @@
 import logging
 import json
+import time
 from typing import Dict, Optional, List, Any
 from models.registry import ModelEntry
 from core.role_manager import get_role_manager
@@ -8,7 +9,7 @@ from gateway.validator import get_request_validator
 from core.error_handler import get_error_handler
 import asyncio
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
