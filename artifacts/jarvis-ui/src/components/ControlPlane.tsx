@@ -281,6 +281,10 @@ export function ControlPlane() {
     );
   }
 
+  export { ControlPlane };
+
+  export { ControlPlane };
+
   if (modelsError) {
     return (
       <GlassmorphicPanel className="w-full p-6" glow="red">
@@ -391,10 +395,9 @@ export function ControlPlane() {
                 <Select
                   value={selectedModels.ARCHITECT}
                   onValueChange={(value) => handleModelChange('ARCHITECT', value)}
-                  disabled={isFetchingHealth}
                 >
                   <SelectTrigger className="w-full bg-black/50 border-cyan-500/50 text-cyan-100 hover:bg-black/70">
-                    <SelectValue placeholder={isFetchingHealth ? "Loading models..." : "Select Architect model"} />
+                    <SelectValue placeholder="Select Architect model" />
                   </SelectTrigger>
                   <SelectContent className="bg-black/80 border-cyan-500/30 text-cyan-100">
                     {Object.entries(models).map(([modelId, model]) => {
@@ -508,10 +511,9 @@ export function ControlPlane() {
                 <Select
                   value={selectedModels.ARBITER}
                   onValueChange={(value) => handleModelChange('ARBITER', value)}
-                  disabled={isFetchingHealth}
                 >
                   <SelectTrigger className="w-full bg-black/50 border-purple-500/50 text-purple-100 hover:bg-black/70">
-                    <SelectValue placeholder={isFetchingHealth ? "Loading models..." : "Select Arbiter model"} />
+                    <SelectValue placeholder="Select Arbiter model" />
                   </SelectTrigger>
                   <SelectContent className="bg-black/80 border-purple-500/30 text-purple-100">
                     {Object.entries(models).map(([modelId, model]) => {
@@ -625,10 +627,9 @@ export function ControlPlane() {
                 <Select
                   value={selectedModels.JUDGE}
                   onValueChange={(value) => handleModelChange('JUDGE', value)}
-                  disabled={isFetchingHealth}
                 >
                   <SelectTrigger className="w-full bg-black/50 border-blue-500/50 text-blue-100 hover:bg-black/70">
-                    <SelectValue placeholder={isFetchingHealth ? "Loading models..." : "Select Judge model"} />
+                    <SelectValue placeholder="Select Judge model" />
                   </SelectTrigger>
                   <SelectContent className="bg-black/80 border-blue-500/30 text-blue-100">
                     {Object.entries(models).map(([modelId, model]) => {
