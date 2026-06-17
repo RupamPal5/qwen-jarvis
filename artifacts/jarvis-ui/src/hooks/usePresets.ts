@@ -47,6 +47,9 @@ export function usePresets() {
         throw new Error(errorData.detail || 'Failed to apply preset');
       }
 
+      // Update the local presets state to reflect the applied preset
+      await fetchPresets();
+
       return await response.json();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');

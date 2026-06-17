@@ -38,7 +38,7 @@ interface HealthMetrics {
 }
 
 export function ControlPlane() {
-  const { models, loading: modelsLoading, error: modelsError } = useModelRegistry();
+  const { models, healthStatus, loading: modelsLoading, error: modelsError } = useModelRegistry();
   const { roles, assignRole, loading: rolesLoading } = useRoleManager();
   const { presets, applyPreset, loading: presetsLoading } = usePresets();
   const [selectedModels, setSelectedModels] = useState<Record<string, string>>({
@@ -295,13 +295,13 @@ export function ControlPlane() {
   };
 
   const getModelStatusInfo = (modelId: string): ModelStatus => {
-    const healthInfo = healthMetrics[modelId] || {};
+    const healthInfo = healthStatus[modelId] || {};
     return {
       model_id: modelId,
-      status: healthInfo.status || 'unknown',
+      status: healthInfo.available ? 'healthy' : (healthInfo.status || 'unknown'),
       latency: healthInfo.latency,
       last_checked: healthInfo.last_checked,
-      last_checked_timestamp: healthInfo.last_checked_timestamp,
+      last_checked_timestamp: healthInfo.last_checked ? new Date(healthInfo.last_checked).getTime() : undefined,
       is_local: models[modelId]?.is_local || false
     };
   };
@@ -495,7 +495,7 @@ export function ControlPlane() {
               </div>
             </CardHeader>
             <CardContent>
-              {isFetchingHealth && !healthMetrics[selectedModels.ARCHITECT || ''] ? (
+              {modelsLoading || !healthStatus[selectedModels.ARCHITECT || ''] ? (
                 <SkeletonDropdown />
               ) : (
                 <Select
@@ -574,11 +574,11 @@ export function ControlPlane() {
                   </div>
                 </div>
               )}
-              {healthError && (
+              {modelsError && (
                 <div className="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
                   <div className="flex items-center space-x-2 text-xs text-red-300">
                     <AlertCircle className="h-3 w-3" />
-                    <span>{healthError}</span>
+                    <span>{modelsError}</span>
                   </div>
                 </div>
               )}
@@ -612,7 +612,7 @@ export function ControlPlane() {
               </div>
             </CardHeader>
             <CardContent>
-              {isFetchingHealth && !healthMetrics[selectedModels.ARBITER || ''] ? (
+              {modelsLoading || !healthStatus[selectedModels.ARBITER || ''] ? (
                 <SkeletonDropdown />
               ) : (
                 <Select
@@ -691,11 +691,11 @@ export function ControlPlane() {
                   </div>
                 </div>
               )}
-              {healthError && (
+              {modelsError && (
                 <div className="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
                   <div className="flex items-center space-x-2 text-xs text-red-300">
                     <AlertCircle className="h-3 w-3" />
-                    <span>{healthError}</span>
+                    <span>{modelsError}</span>
                   </div>
                 </div>
               )}
@@ -729,7 +729,7 @@ export function ControlPlane() {
               </div>
             </CardHeader>
             <CardContent>
-              {isFetchingHealth && !healthMetrics[selectedModels.JUDGE || ''] ? (
+              {modelsLoading || !healthStatus[selectedModels.JUDGE || ''] ? (
                 <SkeletonDropdown />
               ) : (
                 <Select
@@ -808,11 +808,11 @@ export function ControlPlane() {
                   </div>
                 </div>
               )}
-              {healthError && (
+              {modelsError && (
                 <div className="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
                   <div className="flex items-center space-x-2 text-xs text-red-300">
                     <AlertCircle className="h-3 w-3" />
-                    <span>{healthError}</span>
+                    <span>{modelsError}</span>
                   </div>
                 </div>
               )}
