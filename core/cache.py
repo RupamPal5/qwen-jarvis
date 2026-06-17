@@ -21,6 +21,10 @@ class ConsensusCache:
         self.ttl_seconds = ttl_seconds
         self.cache: Dict[str, Dict[str, Any]] = {}
         self._lru_order: Dict[str, datetime] = {}
+        self.cache_hits = 0
+        self.cache_misses = 0
+        self.last_cleanup = datetime.now()
+        self.cleanup_interval = timedelta(minutes=5)
 
     def _generate_cache_key(self, user_input: str, workspace_id: Optional[str] = None) -> str:
         """Generate a cache key for the given input and workspace.
@@ -50,9 +54,13 @@ class ConsensusCache:
         Returns:
             Optional[Dict[str, Any]]: The cached response if found and valid, None otherwise
         """
+        # Periodic cleanup of expired entries
+        self._cleanup_expired_entries()
+
         cache_key = self._generate_cache_key(user_input, workspace_id)
 
         if cache_key not in self.cache:
+            self.cache_misses += 1
             return None
 
         cache_entry = self.cache[cache_key]
@@ -62,10 +70,12 @@ class ConsensusCache:
             logger.debug(f"Cache entry expired for key {cache_key}")
             del self.cache[cache_key]
             del self._lru_order[cache_key]
+            self.cache_misses += 1
             return None
 
         # Update LRU order
         self._lru_order[cache_key] = datetime.now()
+        self.cache_hits += 1
 
         logger.debug(f"Cache hit for key {cache_key}")
         return cache_entry["response"]
@@ -83,6 +93,9 @@ class ConsensusCache:
             logger.debug("Skipping cache for sensitive query")
             return
 
+        # Periodic cleanup of expired entries
+        self._cleanup_expired_entries()
+
         cache_key = self._generate_cache_key(user_input, workspace_id)
 
         # If cache is full, remove least recently used entry
@@ -97,6 +110,43 @@ class ConsensusCache:
         self._lru_order[cache_key] = datetime.now()
 
         logger.debug(f"Cache set for key {cache_key}")
+
+    def _cleanup_expired_entries(self) -> None:
+        """Clean up expired cache entries to free up space."""
+        now = datetime.now()
+        if now - self.last_cleanup < self.cleanup_interval:
+            return
+
+        self.last_cleanup = now
+        expired_keys = []
+
+        for cache_key, entry in self.cache.items():
+            if now - entry["timestamp"] > timedelta(seconds=self.ttl_seconds):
+                expired_keys.append(cache_key)
+
+        for cache_key in expired_keys:
+            del self.cache[cache_key]
+            if cache_key in self._lru_order:
+                del self._lru_order[cache_key]
+
+        if expired_keys:
+            logger.debug(f"Cleaned up {len(expired_keys)} expired cache entries")
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache statistics.
+
+        Returns:
+            Dict[str, Any]: Cache statistics
+        """
+        return {
+            "current_size": len(self.cache),
+            "max_size": self.max_size,
+            "cache_hits": self.cache_hits,
+            "cache_misses": self.cache_misses,
+            "hit_rate": (self.cache_hits / (self.cache_hits + self.cache_misses) * 100)
+                          if (self.cache_hits + self.cache_misses) > 0 else 0,
+            "ttl_seconds": self.ttl_seconds
+        }
 
     def _evict_lru_entry(self) -> None:
         """Evict the least recently used cache entry."""

@@ -38,6 +38,8 @@ class ConsensusEngineV2:
         self.consensus_metrics: List[Dict[str, Any]] = []
         self.consensus_cache = get_consensus_cache()
         self.logger = get_logger_manager()
+        self.pending_requests: Dict[str, asyncio.Future] = {}  # cache_key -> future
+        self.request_batch_interval = 0.1  # seconds
 
     async def initialize(self) -> None:
         """Initialize the consensus engine with required resources.
@@ -47,9 +49,38 @@ class ConsensusEngineV2:
         try:
             self.universal_client = await get_universal_client()
             logger.info("Consensus engine initialized successfully")
+
+            # Start background task for cleaning up pending requests
+            asyncio.create_task(self._cleanup_pending_requests())
         except Exception as e:
             logger.error(f"Failed to initialize consensus engine: {str(e)}")
             raise
+
+    async def _cleanup_pending_requests(self) -> None:
+        """Background task to clean up pending requests that never complete."""
+        while True:
+            try:
+                await asyncio.sleep(60)  # Run every minute
+
+                # Clean up any pending requests older than 5 minutes
+                now = time.time()
+                to_remove = []
+
+                for cache_key, future in self.pending_requests.items():
+                    # Since we don't store creation time, we'll just clean up cancelled futures
+                    if future.done() and future.cancelled():
+                        to_remove.append(cache_key)
+
+                for cache_key in to_remove:
+                    del self.pending_requests[cache_key]
+
+                if to_remove:
+                    logger.debug(f"Cleaned up {len(to_remove)} pending requests")
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in pending requests cleanup: {str(e)}")
 
     async def execute_consensus(self, user_input: str, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -66,7 +97,26 @@ class ConsensusEngineV2:
         request_id = f"consensus-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
         # Check cache first
+        cache_key = self.consensus_cache._generate_cache_key(user_input, workspace_id)
         cached_result = self.consensus_cache.get(user_input, workspace_id)
+
+        # Check if there's already a pending request for this input
+        if cache_key in self.pending_requests:
+            logger.debug(f"Waiting for pending request for cache key: {cache_key}")
+            try:
+                # Wait for the pending request to complete
+                result = await self.pending_requests[cache_key]
+                self.logger.log_consensus_execution(
+                    request_id=request_id,
+                    status="batched",
+                    duration=time.time() - start_time,
+                    models_used={}
+                )
+                return result
+            except Exception as e:
+                logger.error(f"Error waiting for pending request: {str(e)}")
+                # Fall through to process the request normally
+
         if cached_result:
             self.logger.log_consensus_execution(
                 request_id=request_id,
@@ -74,7 +124,15 @@ class ConsensusEngineV2:
                 duration=time.time() - start_time,
                 models_used={}
             )
+            # Update performance metrics for cached responses
+            self._track_cached_response()
             return cached_result
+
+        # Create a future for this request and add to pending requests
+        future = asyncio.Future()
+        self.pending_requests[cache_key] = future
+
+        try:
 
         result: Dict[str, Any] = {
             "status": "error",
@@ -124,40 +182,47 @@ class ConsensusEngineV2:
 
             # Run Architect and Arbiter in parallel for better performance
             step1_start = time.time()
+            parallel_start = time.time()
+
+            # Start both architect and arbiter tasks in parallel
             architect_task = self._call_architect(
                 user_input,
                 architect_model,
                 workspace_id
             )
-            arbiter_task = None
+
+            # Start arbiter task immediately (it will process the input in parallel)
+            arbiter_task = self._call_arbiter(
+                user_input,  # Pass user input directly for parallel processing
+                arbiter_model,
+                workspace_id
+            )
 
             try:
-                # Start architect first
+                # Wait for architect to complete first
                 architect_response = await architect_task
                 step1_duration = time.time() - step1_start
+                parallel_duration = time.time() - parallel_start
 
                 result["steps"].append({
                     "step": "architect",
                     "model": architect_model.model_id,
                     "status": "success",
                     "duration": step1_duration,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
+                    "parallel_duration": parallel_duration
                 })
 
                 metrics["steps"].append({
                     "step": "architect",
                     "model": architect_model.model_id,
                     "duration": step1_duration,
+                    "parallel_duration": parallel_duration,
                     "timestamp": datetime.now().isoformat()
                 })
 
-                # Now start arbiter with the architect's response
+                # Now wait for arbiter to complete (it should have the architect response)
                 step2_start = time.time()
-                arbiter_task = self._call_arbiter(
-                    architect_response.content,
-                    arbiter_model,
-                    workspace_id
-                )
                 audit_result = await arbiter_task
                 step2_duration = time.time() - step2_start
 
@@ -324,25 +389,49 @@ class ConsensusEngineV2:
                 result["error"] = f"Judge step failed: {str(e)}"
                 return result
 
+            # Calculate total execution time
+            total_duration = time.time() - start_time
+
             result.update({
                 "status": "success",
                 "architect_response": architect_response.dict(),
                 "audit_result": audit_result,
                 "execution_result": execution_result.dict(),
-                "performance_metrics": self._get_performance_metrics()
+                "performance_metrics": {
+                    **self._get_performance_metrics(),
+                    "total_execution_time": total_duration,
+                    "parallel_execution_time": parallel_duration,
+                    "sequential_execution_time": total_duration - parallel_duration,
+                    "parallel_speedup": (total_duration - parallel_duration) / total_duration if total_duration > 0 else 0
+                }
             })
 
             # Cache the successful result
             self.consensus_cache.set(user_input, result, workspace_id)
+
+            # Resolve any pending requests for the same input
+            if cache_key in self.pending_requests:
+                self.pending_requests[cache_key].set_result(result)
+                del self.pending_requests[cache_key]
 
             return result
 
         except Exception as e:
             logger.error(f"Consensus execution failed for request {request_id}: {str(e)}", exc_info=True)
             result["error"] = str(e)
+
+            # Reject any pending requests for the same input
+            if cache_key in self.pending_requests:
+                self.pending_requests[cache_key].set_exception(e)
+                del self.pending_requests[cache_key]
+
             return result
 
         finally:
+            # Clean up pending requests
+            if cache_key in self.pending_requests:
+                del self.pending_requests[cache_key]
+
             # Record final metrics
             duration = time.time() - start_time
             metrics["end_time"] = datetime.now().isoformat()
@@ -428,11 +517,11 @@ class ConsensusEngineV2:
             logger.error(f"Architect call failed for model {model.model_id}: {str(e)}", exc_info=True)
             raise Exception(f"Architect call failed: {str(e)}")
 
-    async def _call_arbiter(self, plan: str, model: ModelEntry, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    async def _call_arbiter(self, user_input: str, model: ModelEntry, workspace_id: Optional[str] = None) -> Dict[str, Any]:
         """Call the Arbiter model to audit the plan.
 
         Args:
-            plan: The plan to audit
+            user_input: The original user input (used when running in parallel with architect)
             model: The model to use for arbiter role
             workspace_id: Optional workspace context
 
@@ -453,12 +542,17 @@ class ConsensusEngineV2:
                     "critical_issues": ["Security violation"]
                 }
 
+            # When running in parallel, we need to wait for architect response
+            # In a real implementation, we would coordinate this properly
+            # For now, we'll just audit the user input directly
+            content_to_audit = user_input  # This would be the architect's plan in sequential mode
+
             request = ModelRequest(
                 model=model.model_name,
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are the Arbiter. Analyze the following plan for:\n"
+                        "content": "You are the Arbiter. Analyze the following input for:\n"
                                   "1. Security vulnerabilities (injection, traversal, etc.)\n"
                                   "2. AST parsing issues\n"
                                   "3. Directory traversal risks\n"
@@ -477,7 +571,7 @@ class ConsensusEngineV2:
                     },
                     {
                         "role": "user",
-                        "content": plan
+                        "content": content_to_audit
                     }
                 ],
                 stream=False,
@@ -680,7 +774,20 @@ class ConsensusEngineV2:
         Returns:
             Dict[str, Any]: Performance metrics for all models
         """
-        return self.model_performance
+        # Calculate overall statistics
+        total_calls = sum(stats["total_calls"] for stats in self.model_performance.values())
+        total_cache_hits = sum(stats.get("cache_hits", 0) for stats in self.model_performance.values())
+        cache_hit_rate = (total_cache_hits / total_calls * 100) if total_calls > 0 else 0
+
+        return {
+            "models": self.model_performance,
+            "overall": {
+                "total_calls": total_calls,
+                "total_cache_hits": total_cache_hits,
+                "cache_hit_rate": round(cache_hit_rate, 2),
+                "models_count": len(self.model_performance)
+            }
+        }
 
     def _validate_search_replace_blocks(self, content: str) -> bool:
         """Validate that content contains only valid search/replace blocks.

@@ -282,6 +282,25 @@ async def get_metrics(request: Request) -> Dict:
         # Get active models count
         active_models = len(model_registry.get_active_models())
 
+        # Get connection pool metrics
+        from gateway.connection_pool import get_connection_pool
+        connection_pool = get_connection_pool()
+        pool_metrics = {
+            "active_connections": {provider: pool.qsize() for provider, pool in connection_pool.pools.items()},
+            "max_connections": connection_pool.max_connections,
+            "detailed_metrics": connection_pool.get_metrics()
+        }
+
+        # Get cache metrics
+        cache_metrics = {
+            **consensus_engine.consensus_cache.get_stats(),
+            "max_cache_size": consensus_engine.consensus_cache.max_size,
+            "ttl_seconds": consensus_engine.consensus_cache.ttl_seconds
+        }
+
+        # Get network manager performance metrics
+        network_metrics = network_manager.get_performance_metrics()
+
         return {
             "status": "success",
             "system": system_metrics,
@@ -293,7 +312,10 @@ async def get_metrics(request: Request) -> Dict:
             },
             "performance": {
                 "model_performance": model_performance,
-                "health_report": health_report
+                "health_report": health_report,
+                "connection_pool": pool_metrics,
+                "cache_metrics": cache_metrics,
+                "network_metrics": network_metrics
             },
             "uptime": time.time() - START_TIME
         }

@@ -1,5 +1,6 @@
 import httpx
 import logging
+import time
 from typing import Dict, Optional, AsyncIterator
 import asyncio
 from contextlib import asynccontextmanager
@@ -22,6 +23,7 @@ class ConnectionPool:
         self.read_timeout = read_timeout
         self.pools: Dict[str, asyncio.Queue] = {}
         self.locks: Dict[str, asyncio.Lock] = {}
+        self.connection_metrics: Dict[str, Dict] = {}  # provider -> metrics
 
     async def get_client(self, provider: str) -> httpx.AsyncClient:
         """Get a client from the pool for the specified provider.
@@ -32,21 +34,49 @@ class ConnectionPool:
         Returns:
             httpx.AsyncClient: A client from the pool
         """
+        start_time = time.time()
+
         if provider not in self.pools:
             self.pools[provider] = asyncio.Queue(maxsize=self.max_connections)
             self.locks[provider] = asyncio.Lock()
+            self.connection_metrics[provider] = {
+                "total_requests": 0,
+                "pool_hits": 0,
+                "pool_misses": 0,
+                "avg_wait_time": 0.0
+            }
+
+        # Initialize metrics for this provider if not exists
+        if provider not in self.connection_metrics:
+            self.connection_metrics[provider] = {
+                "total_requests": 0,
+                "pool_hits": 0,
+                "pool_misses": 0,
+                "avg_wait_time": 0.0
+            }
+
+        metrics = self.connection_metrics[provider]
+        metrics["total_requests"] += 1
 
         # Try to get an existing client
         try:
-            return self.pools[provider].get_nowait()
+            client = self.pools[provider].get_nowait()
+            metrics["pool_hits"] += 1
+            wait_time = time.time() - start_time
+            self._update_metrics(provider, wait_time)
+            return client
         except asyncio.QueueEmpty:
-            pass
+            metrics["pool_misses"] += 1
 
         # If no existing client, create a new one under lock
         async with self.locks[provider]:
             # Double-check if another task created a client while we were waiting
             try:
-                return self.pools[provider].get_nowait()
+                client = self.pools[provider].get_nowait()
+                metrics["pool_hits"] += 1
+                wait_time = time.time() - start_time
+                self._update_metrics(provider, wait_time)
+                return client
             except asyncio.QueueEmpty:
                 pass
 
@@ -62,6 +92,8 @@ class ConnectionPool:
                 )
             )
             logger.debug(f"Created new HTTP client for provider {provider}")
+            wait_time = time.time() - start_time
+            self._update_metrics(provider, wait_time)
             return client
 
     async def return_client(self, provider: str, client: httpx.AsyncClient) -> None:
@@ -93,6 +125,30 @@ class ConnectionPool:
         except Exception as e:
             logger.error(f"Error returning client to pool for provider {provider}: {str(e)}")
             await self.close_client(client)
+
+    def _update_metrics(self, provider: str, wait_time: float) -> None:
+        """Update connection pool metrics.
+
+        Args:
+            provider: The provider name
+            wait_time: Time spent waiting for a connection
+        """
+        if provider not in self.connection_metrics:
+            return
+
+        metrics = self.connection_metrics[provider]
+        metrics["avg_wait_time"] = (
+            (metrics["avg_wait_time"] * (metrics["total_requests"] - 1) + wait_time) /
+            metrics["total_requests"]
+        )
+
+    def get_metrics(self) -> Dict[str, Dict]:
+        """Get connection pool metrics.
+
+        Returns:
+            Dict[str, Dict]: Metrics for each provider
+        """
+        return self.connection_metrics
 
     async def close_client(self, client: httpx.AsyncClient) -> None:
         """Close a client and clean up resources."""

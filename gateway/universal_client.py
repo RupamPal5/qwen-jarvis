@@ -150,6 +150,8 @@ class UniversalClient:
         self.request_metrics: List[Dict[str, Any]] = []
         self.circuit_breakers: Dict[str, CircuitBreaker] = {}  # provider -> CircuitBreaker
         self.error_handler = get_error_handler()
+        self.metrics_collection_interval = 60  # seconds
+        self.last_metrics_collection = time.time()
 
     async def get_client(self, provider: str) -> httpx.AsyncClient:
         """Get an HTTP client from the connection pool for a provider.
@@ -168,10 +170,66 @@ class UniversalClient:
         This should be called when the application is shutting down.
         """
         try:
+            # Collect final metrics before closing
+            self._collect_and_report_metrics()
             await self.connection_pool.close_all()
         except Exception as e:
             logger.error(f"Error during client cleanup: {str(e)}")
             raise
+
+    def _collect_and_report_metrics(self) -> None:
+        """Collect and report performance metrics."""
+        try:
+            if not self.request_metrics:
+                return
+
+            # Calculate statistics
+            total_requests = len(self.request_metrics)
+            successful_requests = sum(1 for m in self.request_metrics if m.get("success", False))
+            failed_requests = total_requests - successful_requests
+            success_rate = (successful_requests / total_requests * 100) if total_requests > 0 else 0
+
+            # Calculate latency statistics
+            latencies = [m["latency"] for m in self.request_metrics if "latency" in m]
+            avg_latency = sum(latencies) / len(latencies) if latencies else 0
+            min_latency = min(latencies) if latencies else 0
+            max_latency = max(latencies) if latencies else 0
+
+            # Calculate token usage statistics
+            token_usages = [m.get("tokens_used", 0) for m in self.request_metrics if m.get("tokens_used") is not None]
+            avg_tokens = sum(token_usages) / len(token_usages) if token_usages else 0
+
+            # Log metrics
+            logger.info(f"Model API Performance Metrics (last {len(self.request_metrics)} requests):")
+            logger.info(f"  Total requests: {total_requests}")
+            logger.info(f"  Successful requests: {successful_requests} ({success_rate:.1f}%)")
+            logger.info(f"  Failed requests: {failed_requests}")
+            logger.info(f"  Latency - Avg: {avg_latency:.3f}s, Min: {min_latency:.3f}s, Max: {max_latency:.3f}s")
+            logger.info(f"  Token usage - Avg: {avg_tokens:.1f} tokens per request")
+
+            # Log circuit breaker states
+            for provider, breaker in self.circuit_breakers.items():
+                state = breaker.get_state()
+                logger.info(f"  Circuit breaker for {provider}: {state['state']} "
+                          f"(failures: {state['failure_count']})")
+
+        except Exception as e:
+            logger.error(f"Error collecting metrics: {str(e)}")
+
+    async def _periodic_metrics_collection(self) -> None:
+        """Periodically collect and report metrics."""
+        while True:
+            try:
+                await asyncio.sleep(self.metrics_collection_interval)
+                self._collect_and_report_metrics()
+
+                # Clear metrics after collection to avoid memory buildup
+                self.request_metrics = []
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in periodic metrics collection: {str(e)}")
 
     async def call_model(self, model: ModelEntry, request: ModelRequest) -> ModelResponse:
         """Call a model with retry logic, fallback, and circuit breaker protection.
@@ -447,8 +505,7 @@ class UniversalClient:
             raise Exception(f"Circuit breaker is OPEN for provider {model.provider}")
 
         async with self.connection_pool.acquire(model.provider) as client:
-
-        try:
+            try:
             start_time = time.time()
 
             # Prepare headers and payload based on provider
@@ -600,6 +657,7 @@ async def get_universal_client() -> UniversalClient:
     Returns:
         UniversalClient: The global universal client instance
     """
+    await _universal_client.initialize()
     return _universal_client
 import httpx
 import logging

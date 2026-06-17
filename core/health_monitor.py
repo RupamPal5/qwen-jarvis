@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from models.registry import get_model_registry
 from core.network_manager import get_network_manager
 from security.protocol import get_security_protocol
+from core.consensus_v2 import get_consensus_engine
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -155,7 +156,8 @@ class HealthMonitor:
         """Check the health of system services."""
         services = [
             {"name": "ollama_service", "check": self._check_ollama_service},
-            {"name": "backend_api", "check": self._check_backend_api}
+            {"name": "backend_api", "check": self._check_backend_api},
+            {"name": "consensus_engine", "check": self._check_consensus_engine}
         ]
 
         for service in services:
@@ -203,11 +205,37 @@ class HealthMonitor:
     async def _check_backend_api(self) -> tuple[bool, Optional[str]]:
         """Check if the backend API is responsive."""
         try:
-            # This is a simple check that would be replaced with actual API call
-            # For now, we'll assume it's working if we can reach the port
             if not await self.network_manager._check_port_open("localhost", 8000):
                 return False, "Port 8000 not open"
-            return True, None
+
+            # Make a simple API call to check health
+            async with httpx.AsyncClient(timeout=5) as client:
+                response = await client.get("http://localhost:8000/api/health/ping")
+                if response.status_code != 200:
+                    return False, f"HTTP {response.status_code}"
+                return True, None
+
+        except Exception as e:
+            return False, str(e)
+
+    async def _check_consensus_engine(self) -> tuple[bool, Optional[str]]:
+        """Check if the consensus engine is functioning properly."""
+        try:
+            consensus_engine = await get_consensus_engine()
+            metrics = consensus_engine._get_performance_metrics()
+
+            # Check if we have recent activity
+            if metrics["overall"]["total_calls"] == 0:
+                return True, "No recent calls"  # Not necessarily an error
+
+            # Check cache hit rate
+            cache_hit_rate = metrics["overall"]["cache_hit_rate"]
+            if cache_hit_rate > 80:
+                return True, f"High cache hit rate ({cache_hit_rate}%)"
+            elif cache_hit_rate > 50:
+                return True, f"Moderate cache hit rate ({cache_hit_rate}%)"
+            else:
+                return True, f"Low cache hit rate ({cache_hit_rate}%)"
 
         except Exception as e:
             return False, str(e)

@@ -37,6 +37,8 @@ class NetworkManager:
         self.max_consecutive_failures = 3
         self.recovery_cooldown = 120  # seconds
         self.health_metrics: List[Dict[str, Any]] = []
+        self.performance_metrics: Dict[str, Dict] = {}  # model_id -> performance metrics
+        self.last_metrics_collection = time.time()
 
     async def initialize(self) -> None:
         """Initialize the network manager with required resources.
@@ -87,18 +89,47 @@ class NetworkManager:
         logger.debug("Starting health check for all models")
         check_start = time.time()
 
+        # Group models by provider to optimize health checks
+        models_by_provider = self._group_models_by_provider()
+
+        # Check models in parallel by provider
+        tasks = []
+        for provider, models in models_by_provider.items():
+            tasks.append(self._check_models_for_provider(provider, models))
+
+        await asyncio.gather(*tasks)
+
+        check_duration = time.time() - check_start
+        logger.debug(f"Completed health check for all models in {check_duration:.2f} seconds")
+
+        # Check for models that can be re-enabled
+        await self._check_model_recovery()
+
+    def _group_models_by_provider(self) -> Dict[str, List[ModelEntry]]:
+        """Group active models by provider for optimized health checking."""
+        models_by_provider: Dict[str, List[ModelEntry]] = {}
+
         for model_id, model in self.model_registry.models.items():
             if not model.is_active:
                 continue
 
+            if model.provider not in models_by_provider:
+                models_by_provider[model.provider] = []
+            models_by_provider[model.provider].append(model)
+
+        return models_by_provider
+
+    async def _check_models_for_provider(self, provider: str, models: List[ModelEntry]) -> None:
+        """Check health of models for a specific provider."""
+        for model in models:
             try:
                 start_time = time.time()
                 status = await self._check_model_health(model)
                 latency = time.time() - start_time
 
                 # Update model status
-                if model_id not in self.model_status:
-                    self.model_status[model_id] = ModelStatus(
+                if model.model_id not in self.model_status:
+                    self.model_status[model.model_id] = ModelStatus(
                         available=status["available"],
                         latency=latency,
                         last_checked=datetime.now().isoformat(),
@@ -106,7 +137,7 @@ class NetworkManager:
                         consecutive_failures=0 if status["available"] else 1
                     )
                 else:
-                    current_status = self.model_status[model_id]
+                    current_status = self.model_status[model.model_id]
                     if status["available"]:
                         current_status.available = True
                         current_status.latency = latency
@@ -128,32 +159,26 @@ class NetworkManager:
                             not current_status.is_disabled):
                             current_status.is_disabled = True
                             current_status.disabled_until = datetime.now().isoformat()
-                            logger.warning(f"Auto-disabling model {model_id} after {self.max_consecutive_failures} consecutive failures")
+                            logger.warning(f"Auto-disabling model {model.model_id} after {self.max_consecutive_failures} consecutive failures")
 
                 # Record metrics
-                self._record_health_metrics(model_id, status["available"], latency, status.get("error"))
+                self._record_health_metrics(model.model_id, status["available"], latency, status.get("error"))
 
             except Exception as e:
-                logger.error(f"Error checking model {model_id}: {str(e)}", exc_info=True)
-                if model_id in self.model_status:
-                    current_status = self.model_status[model_id]
+                logger.error(f"Error checking model {model.model_id}: {str(e)}", exc_info=True)
+                if model.model_id in self.model_status:
+                    current_status = self.model_status[model.model_id]
                     current_status.available = False
                     current_status.last_checked = datetime.now().isoformat()
                     current_status.error = str(e)
                     current_status.consecutive_failures += 1
                 else:
-                    self.model_status[model_id] = ModelStatus(
+                    self.model_status[model.model_id] = ModelStatus(
                         available=False,
                         last_checked=datetime.now().isoformat(),
                         error=str(e),
                         consecutive_failures=1
                     )
-
-        check_duration = time.time() - check_start
-        logger.debug(f"Completed health check for all models in {check_duration:.2f} seconds")
-
-        # Check for models that can be re-enabled
-        await self._check_model_recovery()
 
     async def _check_local_model(self, model: ModelEntry) -> Dict[str, Any]:
         """Check if a local model is available with error handling.

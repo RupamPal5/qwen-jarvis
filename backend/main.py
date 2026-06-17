@@ -72,6 +72,11 @@ async def initialize_services() -> None:
     try:
         logger.info("Initializing core services...")
 
+        # Initialize universal client first (connection pool)
+        from gateway.universal_client import get_universal_client
+        universal_client = await get_universal_client()
+        logger.info("Universal client initialized with connection pool")
+
         # Initialize consensus engine
         consensus_engine = await get_consensus_engine()
 
