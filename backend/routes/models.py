@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request, Depends
 import logging
+import time
+import psutil
 from typing import Dict, List, Optional
 from models.registry import ModelEntry, get_model_registry
 from core.role_manager import get_role_manager
@@ -12,6 +14,7 @@ from core.error_handler import get_error_handler
 from core.network_manager import get_network_manager
 from core.health_monitor import get_health_monitor
 from security.encryption import get_api_key_encryptor
+from core.consensus_v2 import get_consensus_engine
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +245,9 @@ async def get_error_stats(request: Request) -> Dict:
     except Exception as e:
         logger.error(f"Failed to get error stats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get error stats: {str(e)}")
+
+# Application start time for uptime calculation
+START_TIME = time.time()
 
 @router.get("/metrics")
 async def get_metrics(request: Request) -> Dict:

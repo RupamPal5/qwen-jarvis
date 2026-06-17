@@ -420,14 +420,6 @@ _model_registry = ModelRegistry()
 def get_model_registry() -> ModelRegistry:
     return _model_registry
 
-# Application start time for uptime calculation
-START_TIME = time.time()
-import yaml
-from pathlib import Path
-from typing import Dict, List, Optional, Union
-from pydantic import BaseModel, Field
-import logging
-
 logger = logging.getLogger(__name__)
 
 class ModelEntry(BaseModel):
