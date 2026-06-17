@@ -15,6 +15,9 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
+# Initialize logger for the module
+logger.setLevel(logging.INFO)
+
 class ConsensusResult(BaseModel):
     """Represents the result of a consensus execution."""
 
@@ -176,6 +179,17 @@ class ConsensusEngineV2:
                 error=str(e)
             )
             return result
+        except Exception as e:
+            logger.error(f"Error validating input: {str(e)}")
+            result["error"] = f"Validation error: {str(e)}"
+            self.logger.log_consensus_execution(
+                request_id=request_id,
+                status="error",
+                duration=time.time() - start_time,
+                models_used={},
+                error=str(e)
+            )
+            return result
 
         try:
             logger.info(f"Starting consensus execution for request {request_id}")
@@ -189,18 +203,14 @@ class ConsensusEngineV2:
                 error_msg = "Not all roles have models assigned"
                 logger.error(f"Consensus failed: {error_msg}")
                 result["error"] = error_msg
+                self.logger.log_consensus_execution(
+                    request_id=request_id,
+                    status="error",
+                    duration=time.time() - start_time,
+                    models_used={},
+                    error=error_msg
+                )
                 return result
-        except Exception as e:
-            logger.error(f"Consensus execution failed: {str(e)}", exc_info=True)
-            result["error"] = str(e)
-            self.logger.log_consensus_execution(
-                request_id=request_id,
-                status="error",
-                duration=time.time() - start_time,
-                models_used={},
-                error=str(e)
-            )
-            return result
 
             # Run Architect and Arbiter in parallel for better performance
             step1_start = time.time()
@@ -270,6 +280,16 @@ class ConsensusEngineV2:
                         "details": audit_result.get("details", ""),
                         "audit_result": audit_result
                     })
+                    self.logger.log_consensus_execution(
+                        request_id=request_id,
+                        status="rejected",
+                        duration=time.time() - start_time,
+                        models_used={
+                            "ARCHITECT": architect_model.model_id,
+                            "ARBITER": arbiter_model.model_id
+                        },
+                        error="Security audit failed"
+                    )
                     return result
             except Exception as e:
                 # Handle architect failure
@@ -314,6 +334,17 @@ class ConsensusEngineV2:
                     })
 
                     result["error"] = f"Arbiter step failed: {str(e)}"
+
+                self.logger.log_consensus_execution(
+                    request_id=request_id,
+                    status="error",
+                    duration=time.time() - start_time,
+                    models_used={
+                        "ARCHITECT": architect_model.model_id,
+                        "ARBITER": arbiter_model.model_id
+                    },
+                    error=str(e)
+                )
                 return result
 
             # Step 3: Get human authorization
@@ -344,6 +375,16 @@ class ConsensusEngineV2:
                         "status": "rejected",
                         "reason": "User authorization denied"
                     })
+                    self.logger.log_consensus_execution(
+                        request_id=request_id,
+                        status="rejected",
+                        duration=time.time() - start_time,
+                        models_used={
+                            "ARCHITECT": architect_model.model_id,
+                            "ARBITER": arbiter_model.model_id
+                        },
+                        error="User authorization denied"
+                    )
                     return result
             except Exception as e:
                 step3_duration = time.time() - step3_start
@@ -363,6 +404,16 @@ class ConsensusEngineV2:
                 })
 
                 result["error"] = f"Authorization step failed: {str(e)}"
+                self.logger.log_consensus_execution(
+                    request_id=request_id,
+                    status="error",
+                    duration=time.time() - start_time,
+                    models_used={
+                        "ARCHITECT": architect_model.model_id,
+                        "ARBITER": arbiter_model.model_id
+                    },
+                    error=str(e)
+                )
                 return result
 
             # Step 4: Judge executes the approved plan
@@ -409,6 +460,17 @@ class ConsensusEngineV2:
                 })
 
                 result["error"] = f"Judge step failed: {str(e)}"
+                self.logger.log_consensus_execution(
+                    request_id=request_id,
+                    status="error",
+                    duration=time.time() - start_time,
+                    models_used={
+                        "ARCHITECT": architect_model.model_id,
+                        "ARBITER": arbiter_model.model_id,
+                        "JUDGE": judge_model.model_id
+                    },
+                    error=str(e)
+                )
                 return result
 
             # Calculate total execution time
@@ -436,6 +498,16 @@ class ConsensusEngineV2:
                 self.pending_requests[cache_key].set_result(result)
                 del self.pending_requests[cache_key]
 
+            self.logger.log_consensus_execution(
+                request_id=request_id,
+                status="success",
+                duration=total_duration,
+                models_used={
+                    "ARCHITECT": architect_model.model_id,
+                    "ARBITER": arbiter_model.model_id,
+                    "JUDGE": judge_model.model_id
+                }
+            )
             return result
 
         except Exception as e:
@@ -447,6 +519,13 @@ class ConsensusEngineV2:
                 self.pending_requests[cache_key].set_exception(e)
                 del self.pending_requests[cache_key]
 
+            self.logger.log_consensus_execution(
+                request_id=request_id,
+                status="error",
+                duration=time.time() - start_time,
+                models_used={},
+                error=str(e)
+            )
             return result
 
         finally:
@@ -460,23 +539,6 @@ class ConsensusEngineV2:
             metrics["duration"] = duration
             metrics["success"] = result.get("status") == "success"
             self.consensus_metrics.append(metrics)
-
-            # Log the consensus execution
-            models_used = {}
-            if result.get("status") == "success":
-                models_used = {
-                    "ARCHITECT": result.get("architect_response", {}).get("model", ""),
-                    "ARBITER": result.get("audit_result", {}).get("model", ""),
-                    "JUDGE": result.get("execution_result", {}).get("model", "")
-                }
-
-            self.logger.log_consensus_execution(
-                request_id=request_id,
-                status=result.get("status", "error"),
-                duration=duration,
-                models_used=models_used,
-                error=result.get("error")
-            )
 
             # Clean up old metrics
             if len(self.consensus_metrics) > 1000:
@@ -563,11 +625,6 @@ class ConsensusEngineV2:
                     "warnings": ["Dangerous patterns detected in input"],
                     "critical_issues": ["Security violation"]
                 }
-
-            # When running in parallel, we need to wait for architect response
-            # In a real implementation, we would coordinate this properly
-            # For now, we'll just audit the user input directly
-            content_to_audit = user_input  # This would be the architect's plan in sequential mode
 
             # When running in parallel, we need to wait for architect response
             # In a real implementation, we would coordinate this properly
