@@ -142,4 +142,14 @@ router.post("/ollama/generate", async (req, res) => {
   } catch { res.status(502).json({ error: "Ollama offline" }); }
 });
 
+import { ErrorRequestHandler } from "express";
+
+// Add error handling middleware
+const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: "Internal Server Error" });
+};
+
+router.use(errorHandler);
+
 export default router;
