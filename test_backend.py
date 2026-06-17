@@ -3,62 +3,111 @@
 import asyncio
 import sys
 import os
+from pathlib import Path
 
-# Add the backend directory to the path
+# Add the project directory to the path
 sys.path.insert(0, os.path.abspath('.'))
 
-async def test_imports():
-    """Test that all imports work correctly"""
+async def test_model_registry():
+    """Test the model registry functionality"""
     try:
-        from backend.main import app
-        print("✓ Main app import successful")
+        from models.registry import get_model_registry
 
-        from consensus.tri_node_engine import TriNodeConsensusEngine
-        print("✓ Tri-node engine import successful")
+        registry = get_model_registry()
+        print(f"✓ Loaded {len(registry.models)} models from registry")
 
-        from routes import router
-        print("✓ Router import successful")
+        # Test getting a model
+        test_model = registry.get_model("qwen2.5-coder:7b")
+        if not test_model:
+            print("✗ Failed to get test model")
+            return False
 
-        from stores import get_workspace_store
-        print("✓ Stores import successful")
-
-        from utils.file_utils import validate_file_path
-        print("✓ File utils import successful")
-
-        from utils.safety import validate_search_replace_block
-        print("✓ Safety utils import successful")
-
+        print(f"✓ Successfully retrieved model: {test_model.model_id}")
         return True
     except Exception as e:
-        print(f"✗ Import failed: {e}")
+        print(f"✗ Model registry test failed: {e}")
         return False
 
-def test_file_operations():
-    """Test file operations"""
+async def test_role_manager():
+    """Test the role manager functionality"""
     try:
-        from utils.file_utils import validate_file_path
+        from core.role_manager import get_role_manager
 
-        # Test with a sample file
-        test_file = "backend/main.py"
-        result = validate_file_path(test_file)
-        print(f"✓ File validation successful: {result}")
+        role_manager = get_role_manager()
 
+        # Test assigning a role
+        success = role_manager.assign_role("ARCHITECT", "qwen2.5-coder:7b")
+        if not success:
+            print("✗ Failed to assign role")
+            return False
+
+        print("✓ Successfully assigned role")
+
+        # Test getting assigned model
+        model = role_manager.get_assigned_model("ARCHITECT")
+        if not model:
+            print("✗ Failed to get assigned model")
+            return False
+
+        print(f"✓ Assigned model: {model.model_id}")
         return True
     except Exception as e:
-        print(f"✗ File operation failed: {e}")
+        print(f"✗ Role manager test failed: {e}")
+        return False
+
+async def test_consensus_engine():
+    """Test the consensus engine functionality"""
+    try:
+        from core.consensus_v2 import get_consensus_engine
+
+        consensus_engine = await get_consensus_engine()
+
+        # Test executing consensus
+        result = await consensus_engine.execute_consensus("Test input")
+        if not result or result.get("status") != "success":
+            print("✗ Failed to execute consensus")
+            return False
+
+        print("✓ Successfully executed consensus")
+        return True
+    except Exception as e:
+        print(f"✗ Consensus engine test failed: {e}")
+        return False
+
+async def test_network_manager():
+    """Test the network manager functionality"""
+    try:
+        from core.network_manager import get_network_manager
+
+        network_manager = await get_network_manager()
+
+        # Test checking model status
+        status = network_manager.get_model_status("qwen2.5-coder:7b")
+        if not status:
+            print("✗ Failed to get model status")
+            return False
+
+        print(f"✓ Model status: {status}")
+        return True
+    except Exception as e:
+        print(f"✗ Network manager test failed: {e}")
         return False
 
 if __name__ == "__main__":
-    print("Testing backend imports and functionality...")
+    print("Testing JARVIS V5.0 architecture...")
 
-    # Test imports
-    import_success = asyncio.run(test_imports())
+    # Run all tests
+    tests = [
+        test_model_registry(),
+        test_role_manager(),
+        test_consensus_engine(),
+        test_network_manager()
+    ]
 
-    # Test file operations
-    file_success = test_file_operations()
+    results = asyncio.run(asyncio.gather(*tests))
 
-    if import_success and file_success:
-        print("\n✓ All tests passed! Backend is ready.")
+    if all(results):
+        print("\n✓ All tests passed! Architecture is ready.")
         sys.exit(0)
     else:
         print("\n✗ Some tests failed.")

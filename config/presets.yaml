@@ -1,0 +1,24 @@
+presets:
+  default:
+    name: Default Configuration
+    description: Default model assignments
+    assignments:
+      ARCHITECT: qwen2.5-coder:7b
+      ARBITER: gemini-2.5-flash
+      JUDGE: llama-3.3-70b
+
+  coding:
+    name: Coding Focus
+    description: Optimized for coding tasks
+    assignments:
+      ARCHITECT: qwen2.5-coder:32b
+      ARBITER: gemini-2.5-flash
+      JUDGE: mistral-codestral
+
+  fast:
+    name: Fast Response
+    description: Optimized for speed
+    assignments:
+      ARCHITECT: qwen2.5:1.5b
+      ARBITER: gemini-2.5-flash
+      JUDGE: llama3.2:3b

@@ -1,0 +1,66 @@
+models:
+  # Ollama models
+  qwen2.5-coder:7b:
+    provider: ollama
+    model_name: qwen2.5-coder:7b
+    context_window: 32000
+    speed_rating: 7
+    is_local: true
+    is_active: true
+
+  qwen2.5:1.5b:
+    provider: ollama
+    model_name: qwen2.5:1.5b
+    context_window: 32000
+    speed_rating: 8
+    is_local: true
+    is_active: true
+
+  qwen2.5-coder:32b:
+    provider: ollama
+    model_name: qwen2.5-coder:32b
+    context_window: 32000
+    speed_rating: 5
+    is_local: true
+    is_active: true
+
+  llama3.2:3b:
+    provider: ollama
+    model_name: llama3.2:3b
+    context_window: 8000
+    speed_rating: 9
+    is_local: true
+    is_active: true
+
+  deepseek-r1:8b:
+    provider: ollama
+    model_name: deepseek-r1:8b
+    context_window: 16000
+    speed_rating: 6
+    is_local: true
+    is_active: true
+
+  # Cloud API models
+  gemini-2.5-flash:
+    provider: gemini
+    model_name: gemini-1.5-flash-latest
+    context_window: 1000000
+    speed_rating: 4
+    is_local: false
+    is_active: true
+
+  mistral-codestral:
+    provider: mistral
+    model_name: codestral-latest
+    context_window: 32000
+    speed_rating: 5
+    is_local: false
+    is_active: true
+
+  llama-3.3-70b:
+    provider: together
+    model_name: meta-llama/Llama-3.3-70b-chat-hf
+    context_window: 8000
+    speed_rating: 3
+    is_local: false
+    is_active: true
