@@ -504,7 +504,6 @@ export default function JarvisUI() {
   const [themePanelOpen, setThemePanelOpen] = useState(false);
   const [folderEditMode, setFolderEditMode] = useState<{ id: string; name: string } | null>(null);
   const themePanelRef = useRef<HTMLDivElement>(null);
-  const folderNameInputRef = useRef<HTMLInputElement>(null);
 
   const metrics = useSystemMetrics();
   const notificationSystem = useNotifications();
@@ -531,6 +530,11 @@ export default function JarvisUI() {
       folderNameInputRef.current.select();
     }
   }, [folderEditMode]);
+
+  // Sync activeView with activePanel from store
+  useEffect(() => {
+    setActiveView(activePanel);
+  }, [activePanel]);
 
   // Click-outside to close theme panel
   useEffect(() => {
