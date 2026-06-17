@@ -536,6 +536,11 @@ export default function JarvisUI() {
     setActiveView(activePanel);
   }, [activePanel]);
 
+  // Sync activeView with activePanel from store
+  useEffect(() => {
+    setActiveView(activePanel);
+  }, [activePanel]);
+
   // Click-outside to close theme panel
   useEffect(() => {
     if (!themePanelOpen) return;
