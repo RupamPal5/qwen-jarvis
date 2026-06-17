@@ -1,7 +1,7 @@
 // JARVIS V5.0 GOD PROTOCOL - ULTIMATE EDITION
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useStore } from "../store";
+import { useStore, type Message } from "../store";
 import {
   Brain, Shield, Activity, MessageSquare, Terminal,
   Mic, Zap, Cpu, Network, Lock,
@@ -150,7 +150,6 @@ import {
   Wheat,
   Sparkles,
 } from "lucide-react";
-import { useStore, type Message } from "../store";
 import { THEMES, applyTheme, type ThemeId } from "../theme";
 import InitializeSystem from "../components/InitializeSystem";
 import XTerminal from "../components/XTerminal";
