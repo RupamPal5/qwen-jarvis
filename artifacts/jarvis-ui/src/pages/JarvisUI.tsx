@@ -506,7 +506,7 @@ export default function JarvisUI() {
 
   const metrics = useSystemMetrics();
   const notificationSystem = useNotifications();
-  const { messages, addMessage, theme, setTheme, systemStatus, setSystemStatus, setAudioAmplitude, ollamaOnline, ollamaModelCount } = useStore();
+  const { messages, addMessage, systemStatus, setSystemStatus, setAudioAmplitude, ollamaOnline, ollamaModelCount } = useStore();
   
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);

@@ -47,8 +47,6 @@ export function ControlPlane() {
     JUDGE: '',
   });
   const [isApplying, setIsApplying] = useState(false);
-
-  const notifyConfigUpdated = () => {
     // Notify via WebSocket if available
     if (window.WebSocket) {
       try {
@@ -196,6 +194,8 @@ export function ControlPlane() {
       is_local: models[modelId]?.is_local || false
     };
   };
+
+  const getStatusColor = (status: string, latency?: number) => {
 
   const getStatusColor = (status: string, latency?: number) => {
     if (status === 'unhealthy' || status === 'error') return 'bg-red-500';
