@@ -654,14 +654,14 @@ class UniversalClient:
                 tokens_used=tokens_used
             )
 
-        except httpx.HTTPError as e:
-            logger.error(f"HTTP error calling cloud model {model.model_id}: {str(e)}")
-            circuit_breaker.record_failure()
-            raise Exception(f"HTTP error calling cloud model {model.model_id}: {str(e)}")
-        except Exception as e:
-            logger.error(f"Error calling cloud model {model.model_id}: {str(e)}", exc_info=True)
-            circuit_breaker.record_failure()
-            raise
+                except httpx.HTTPError as e:
+                    logger.error(f"HTTP error calling cloud model {model.model_id}: {str(e)}")
+                    circuit_breaker.record_failure()
+                    raise Exception(f"HTTP error calling cloud model {model.model_id}: {str(e)}")
+                except Exception as e:
+                    logger.error(f"Error calling cloud model {model.model_id}: {str(e)}", exc_info=True)
+                    circuit_breaker.record_failure()
+                    raise
 
 # Global client instance
 _universal_client = UniversalClient()

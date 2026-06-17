@@ -140,17 +140,17 @@ class ConsensusEngineV2:
                 "steps": []
             }
 
-        # Record metrics
-        metrics = {
-            "request_id": request_id,
-            "user_input": user_input,
-            "workspace_id": workspace_id,
-            "start_time": datetime.now().isoformat(),
-            "end_time": None,
-            "duration": None,
-            "steps": [],
-            "success": False
-        }
+            # Record metrics
+            metrics: Dict[str, Any] = {
+                "request_id": request_id,
+                "user_input": user_input,
+                "workspace_id": workspace_id,
+                "start_time": datetime.now().isoformat(),
+                "end_time": None,
+                "duration": None,
+                "steps": [],
+                "success": False
+            }
 
         # Validate input
         validator = get_request_validator()
