@@ -5,6 +5,8 @@ from typing import Dict, Optional, List
 import json
 import asyncio
 import logging
+import re
+import subprocess
 from pathlib import Path
 from models.registry import get_model_registry
 from core.role_manager import get_role_manager
