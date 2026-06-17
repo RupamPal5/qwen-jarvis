@@ -153,15 +153,27 @@ class ConsensusEngineV2:
             }
 
         # Validate input
-        validator = get_request_validator()
-        if not validator._validate_message_content(user_input):
-            result["error"] = "Input contains potentially dangerous patterns"
+        try:
+            validator = get_request_validator()
+            if not validator._validate_message_content(user_input):
+                result["error"] = "Input contains potentially dangerous patterns"
+                self.logger.log_consensus_execution(
+                    request_id=request_id,
+                    status="error",
+                    duration=time.time() - start_time,
+                    models_used={},
+                    error="Input contains potentially dangerous patterns"
+                )
+                return result
+        except Exception as e:
+            logger.error(f"Error validating input: {str(e)}")
+            result["error"] = f"Validation error: {str(e)}"
             self.logger.log_consensus_execution(
                 request_id=request_id,
                 status="error",
                 duration=time.time() - start_time,
                 models_used={},
-                error="Input contains potentially dangerous patterns"
+                error=str(e)
             )
             return result
 

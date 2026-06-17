@@ -60,7 +60,8 @@ security_protocol = get_security_protocol()
 # Set up encryption key fallback for development
 if not os.getenv("ENCRYPTION_KEY"):
     logger.warning("ENCRYPTION_KEY not found in environment variables, using development key")
-    os.environ["ENCRYPTION_KEY"] = "dev_key_for_testing_only_change_in_production"
+    # Use the key from .env file or a secure default
+    os.environ["ENCRYPTION_KEY"] = os.getenv("ENCRYPTION_KEY", "bIbGOuWHrhF5nkj-cVjtuGvt3rsHHbNRmGmPjHr9HuM==")
 
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
