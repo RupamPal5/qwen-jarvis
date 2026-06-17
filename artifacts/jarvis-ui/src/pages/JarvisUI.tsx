@@ -522,8 +522,8 @@ export default function JarvisUI() {
     // Listen for configuration updates
     const handleConfigUpdate = () => {
       notificationSystem.addNotification({
-        type: "INFO",
-        title: "Configuration Updated",
+        type: "MODEL_UPDATE",
+        title: "Model Configuration Updated",
         message: "Model assignments have been updated",
         duration: 3000,
       });
