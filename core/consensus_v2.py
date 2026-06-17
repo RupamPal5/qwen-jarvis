@@ -533,13 +533,18 @@ class ConsensusEngineV2:
         try:
             # Validate input
             validator = get_request_validator()
-            if not validator._validate_message_content(plan):
+            if not validator._validate_message_content(user_input):
                 return {
                     "is_safe": False,
-                    "details": "Plan contains potentially dangerous patterns",
-                    "warnings": ["Dangerous patterns detected in plan"],
+                    "details": "Input contains potentially dangerous patterns",
+                    "warnings": ["Dangerous patterns detected in input"],
                     "critical_issues": ["Security violation"]
                 }
+
+            # When running in parallel, we need to wait for architect response
+            # In a real implementation, we would coordinate this properly
+            # For now, we'll just audit the user input directly
+            content_to_audit = user_input  # This would be the architect's plan in sequential mode
 
             # When running in parallel, we need to wait for architect response
             # In a real implementation, we would coordinate this properly
