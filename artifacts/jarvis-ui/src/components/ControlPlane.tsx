@@ -197,8 +197,6 @@ export function ControlPlane() {
   };
 
   const getStatusColor = (status: string, latency?: number) => {
-
-  const getStatusColor = (status: string, latency?: number) => {
     if (status === 'unhealthy' || status === 'error') return 'bg-red-500';
     if (status === 'unknown') return 'bg-gray-500';
     if (latency === undefined) return 'bg-gray-500';
@@ -809,4 +807,3 @@ export function ControlPlane() {
       </div>
     </GlassmorphicPanel>
   );
-}
