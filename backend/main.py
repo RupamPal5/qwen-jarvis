@@ -412,8 +412,6 @@ class ModelConfigRequest(BaseModel):
 # Include API routes
 app.include_router(api_router, prefix="/api")
 
-manager = ConnectionManager()
-
 @app.get("/api/models")
 async def list_models():
     """List all available models"""
