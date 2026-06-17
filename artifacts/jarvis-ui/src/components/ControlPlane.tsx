@@ -87,13 +87,9 @@ export function ControlPlane() {
   };
   */
 
-  const [modelStatuses, setModelStatuses] = useState<Record<string, ModelStatus>>({});
-  const [healthMetrics, setHealthMetrics] = useState<HealthMetrics>({});
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [activePreset, setActivePreset] = useState<string>('');
   const [presetDropdownOpen, setPresetDropdownOpen] = useState(false);
-  const [isFetchingHealth, setIsFetchingHealth] = useState(false);
-  const [healthError, setHealthError] = useState<string | null>(null);
 
   // Initialize selected models from current roles
   useEffect(() => {
@@ -106,112 +102,7 @@ export function ControlPlane() {
     }
   }, [roles]);
 
-  // Fetch health metrics periodically
-  useEffect(() => {
-    const fetchHealthMetrics = async () => {
-      if (modelsLoading || !Object.keys(models).length) return;
-
-      setIsFetchingHealth(true);
-      setHealthError(null);
-      try {
-        const response = await fetch('/api/models/status/all');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-
-        // Transform the data into our health metrics format
-        const newHealthMetrics: HealthMetrics = {};
-        Object.keys(models).forEach(modelId => {
-          if (data[modelId]) {
-            newHealthMetrics[modelId] = {
-              latency: data[modelId].latency,
-              status: data[modelId].available ? 'healthy' : 'unhealthy',
-              last_checked: data[modelId].last_checked,
-              last_checked_timestamp: data[modelId].last_checked ? new Date(data[modelId].last_checked).getTime() : undefined
-            };
-          } else {
-            newHealthMetrics[modelId] = {
-              status: 'unknown',
-              last_checked: undefined,
-              last_checked_timestamp: undefined
-            };
-          }
-        });
-        setHealthMetrics(newHealthMetrics);
-      } catch (error) {
-        console.error('Failed to fetch health metrics:', error);
-        setHealthError('Failed to load model health data');
-      } finally {
-        setIsFetchingHealth(false);
-      }
-    };
-
-    // Initial fetch
-    fetchHealthMetrics();
-
-    // Set up periodic fetching
-    const interval = setInterval(fetchHealthMetrics, 30000); // Every 30 seconds
-
-    // Initialize WebSocket connection for real-time updates
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const socket = new WebSocket(`${protocol}//${window.location.host}/ws/control-plane`);
-
-    socket.onopen = () => {
-      console.log('Control Plane WebSocket connected');
-    };
-
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'model_status_update') {
-        setModelStatuses(prev => ({
-          ...prev,
-          [data.model_id]: data.status
-        }));
-
-        // Update health metrics with real-time data
-        setHealthMetrics(prev => ({
-          ...prev,
-          [data.model_id]: {
-            ...prev[data.model_id],
-            latency: data.status.latency,
-            status: data.status.available ? 'healthy' : 'unhealthy',
-            last_checked: data.status.last_checked,
-            last_checked_timestamp: data.status.last_checked ? new Date(data.status.last_checked).getTime() : undefined
-          }
-        }));
-      }
-    };
-
-    socket.onclose = () => {
-      console.log('Control Plane WebSocket disconnected');
-    };
-
-    socket.onerror = (error) => {
-      console.error('Control Plane WebSocket error:', error);
-    };
-
-    setWs(socket);
-
-    return () => {
-      if (socket) {
-        socket.close();
-      }
-      clearInterval(interval);
-    };
-  }, [models, modelsLoading]);
-
-  // Subscribe to model status updates
-  useEffect(() => {
-    if (ws && !modelsLoading && ws.readyState === WebSocket.OPEN) {
-      Object.keys(models).forEach(modelId => {
-        ws.send(JSON.stringify({
-          type: 'subscribe_model_status',
-          model_id: modelId
-        }));
-      });
-    }
-  }, [ws, models, modelsLoading]);
+  // The healthStatus is now managed by the useModelRegistry hook
 
   const handleModelChange = (role: string, modelId: string) => {
     setSelectedModels(prev => ({
@@ -824,7 +715,7 @@ export function ControlPlane() {
         <div className="flex justify-end">
           <Button
             onClick={handleApplyConfig}
-            disabled={isApplying || isFetchingHealth}
+            disabled={isApplying || modelsLoading}
             className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:shadow-cyan-500/50 transition-all duration-200 transform hover:scale-105 text-lg disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isApplying ? (
@@ -832,10 +723,10 @@ export function ControlPlane() {
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                 DEPLOYING...
               </>
-            ) : isFetchingHealth ? (
+            ) : modelsLoading ? (
               <>
                 <Clock className="mr-2 h-5 w-5 animate-spin" />
-                LOADING HEALTH DATA...
+                LOADING MODELS...
               </>
             ) : (
               <>
