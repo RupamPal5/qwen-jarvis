@@ -794,7 +794,7 @@ export default function JarvisUI() {
               <div className="text-2xl font-bold text-purple-400">{metrics.memoryUsage.toFixed(1)}%</div>
               <ProgressBar value={metrics.memoryUsage} color="purple" size="sm" showLabel={false} className="mt-2" />
             </div>
-            <div className="bg-black/30 rounded-lg p-4">
+            <div className="bg-card/30 rounded-lg p-4">
               <div className="text-xs text-white/60 mb-2">GPU</div>
               <div className="text-2xl font-bold text-green-400">{metrics.gpuUsage.toFixed(1)}%</div>
               <ProgressBar value={metrics.gpuUsage} color="green" size="sm" showLabel={false} className="mt-2" />

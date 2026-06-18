@@ -285,12 +285,12 @@ export function ControlPlane() {
     return (
       <GlassmorphicPanel className="w-full p-6" glow="red">
         <div className="flex flex-col items-center justify-center min-h-[300px] space-y-6">
-          <AlertCircle className="h-16 w-16 text-red-400" />
-          <h2 className="text-2xl font-bold text-red-300">MODEL DATA UNAVAILABLE</h2>
-          <p className="text-center text-gray-300 max-w-md">
+          <AlertCircle className="h-16 w-16 text-destructive" />
+          <h2 className="text-2xl font-bold text-destructive">MODEL DATA UNAVAILABLE</h2>
+          <p className="text-center text-muted-foreground max-w-md">
             Failed to load model registry data. The system cannot function without this information.
           </p>
-          <div className="text-sm text-gray-400">
+          <div className="text-sm text-muted-foreground">
             <p>Error: {modelsError}</p>
           </div>
           <Button
