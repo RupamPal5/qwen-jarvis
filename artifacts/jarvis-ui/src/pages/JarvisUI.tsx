@@ -495,8 +495,7 @@ export default function JarvisUI() {
     createProjectFolder,
     renameProjectFolder,
     archiveProjectFolder,
-    setTheme,
-    theme
+    setTheme
   } = useStore();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
