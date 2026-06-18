@@ -281,10 +281,6 @@ export function ControlPlane() {
     );
   }
 
-  export { ControlPlane };
-
-  export { ControlPlane };
-
   if (modelsError) {
     return (
       <GlassmorphicPanel className="w-full p-6" glow="red">
