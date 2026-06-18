@@ -423,7 +423,7 @@ const ProgressBar: React.FC<{
     cyan: "from-cyan-500 to-blue-500",
     purple: "from-purple-500 to-pink-500",
     green: "from-green-500 to-emerald-500",
-    red: "from-red-500 to-orange-500",
+    red: "from-destructive to-orange-500",
     orange: "from-orange-500 to-yellow-500",
   };
 
@@ -784,12 +784,12 @@ export default function JarvisUI() {
           </div>
           
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-black/30 rounded-lg p-4">
+            <div className="bg-card/30 rounded-lg p-4">
               <div className="text-xs text-white/60 mb-2">CPU Usage</div>
               <div className="text-2xl font-bold text-cyan-400">{metrics.cpuUsage.toFixed(1)}%</div>
               <ProgressBar value={metrics.cpuUsage} color="cyan" size="sm" showLabel={false} className="mt-2" />
             </div>
-            <div className="bg-black/30 rounded-lg p-4">
+            <div className="bg-card/30 rounded-lg p-4">
               <div className="text-xs text-white/60 mb-2">Memory</div>
               <div className="text-2xl font-bold text-purple-400">{metrics.memoryUsage.toFixed(1)}%</div>
               <ProgressBar value={metrics.memoryUsage} color="purple" size="sm" showLabel={false} className="mt-2" />
@@ -851,7 +851,7 @@ export default function JarvisUI() {
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               placeholder="Enter command..."
-              className="flex-1 bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-white/40 focus:outline-none focus:border-purple-500/50"
+              className="flex-1 bg-card/40 border border-border rounded-lg px-4 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary/50"
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   handleSendMessage(chatInput);
@@ -894,14 +894,14 @@ export default function JarvisUI() {
             Active Tasks
           </h3>
           <div className="space-y-2">
-            <div className="bg-black/30 rounded-lg p-3">
+            <div className="bg-card/30 rounded-lg p-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs text-white">Memory Optimization</span>
                 <span className="text-xs text-green-400">78%</span>
               </div>
               <ProgressBar value={78} color="green" size="sm" showLabel={false} />
             </div>
-            <div className="bg-black/30 rounded-lg p-3">
+            <div className="bg-card/30 rounded-lg p-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs text-white">Network Scan</span>
                 <span className="text-xs text-cyan-400">45%</span>
@@ -1530,9 +1530,9 @@ export default function JarvisUI() {
               exit={{ opacity: 0, x: 100 }}
               className={`p-4 rounded-lg border backdrop-blur-xl max-w-sm ${
                 notification.type === "SUCCESS"? "bg-green-600/20 border-green-500/30" :
-                notification.type === "ERROR"? "bg-red-600/20 border-red-500/30" :
+                notification.type === "ERROR"? "bg-destructive/20 border-destructive/30" :
                 notification.type === "WARNING"? "bg-yellow-600/20 border-yellow-500/30" :
-                "bg-cyan-600/20 border-cyan-500/30"
+                "bg-primary/20 border-primary/30"
               }`}
             >
               <div className="flex items-start gap-3">

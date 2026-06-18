@@ -138,7 +138,7 @@ export function ControlPlane() {
       const result = await response.json();
       toast.success('Configuration Deployed Successfully!', {
         description: 'Model assignments have been updated',
-        icon: <CheckCircle className="h-5 w-5 text-green-500" />,
+        icon: <CheckCircle className="h-5 w-5 text-primary" />,
         duration: 5000,
       });
       setActivePreset('');
@@ -156,7 +156,7 @@ export function ControlPlane() {
     } catch (error) {
       toast.error('Deployment Failed', {
         description: error instanceof Error ? error.message : String(error),
-        icon: <XCircle className="h-5 w-5 text-red-500" />,
+        icon: <XCircle className="h-5 w-5 text-destructive" />,
         duration: 5000,
       });
     } finally {
@@ -197,13 +197,13 @@ export function ControlPlane() {
   };
 
   const getStatusColor = (status: string, latency?: number) => {
-    if (status === 'unhealthy' || status === 'error') return 'bg-red-500';
-    if (status === 'unknown') return 'bg-gray-500';
-    if (latency === undefined) return 'bg-gray-500';
+    if (status === 'unhealthy' || status === 'error') return 'bg-destructive';
+    if (status === 'unknown') return 'bg-muted';
+    if (latency === undefined) return 'bg-muted';
 
-    if (latency < 500) return 'bg-green-500';
-    if (latency >= 500 && latency <= 1500) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (latency < 500) return 'bg-green-500'; // Keep green-500 as it's a status indicator
+    if (latency >= 500 && latency <= 1500) return 'bg-yellow-500'; // Keep yellow-500 as it's a status indicator
+    return 'bg-destructive';
   };
 
   const getStatusIcon = (status: string, latency?: number) => {
@@ -295,7 +295,7 @@ export function ControlPlane() {
           </div>
           <Button
             onClick={() => window.location.reload()}
-            className="bg-gradient-to-r from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:shadow-red-500/50 transition-all duration-200"
+            className="bg-gradient-to-r from-destructive to-orange-600 hover:from-red-600 hover:to-orange-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg hover:shadow-red-500/50 transition-all duration-200"
           >
             <RefreshCw className="mr-2 h-5 w-5" />
             RETRY LOADING
@@ -369,6 +369,12 @@ export function ControlPlane() {
                 {selectedModels.ARCHITECT && (
                   <>
                     <Badge variant={models[selectedModels.ARCHITECT]?.is_local ? 'secondary' : 'default'}>
+                      {models[selectedModels.ARCHITECT]?.is_local ? 'LOCAL' : 'CLOUD'}
+                    </Badge>
+                    <div className={`w-3 h-3 rounded-full ${getStatusColor(
+                      getModelStatusInfo(selectedModels.ARCHITECT).status,
+                      getModelStatusInfo(selectedModels.ARCHITECT).latency
+                    )}`}>
                       {models[selectedModels.ARCHITECT]?.is_local ? 'LOCAL' : 'CLOUD'}
                     </Badge>
                     <div className={`w-3 h-3 rounded-full ${getStatusColor(
@@ -464,8 +470,8 @@ export function ControlPlane() {
                 </div>
               )}
               {modelsError && (
-                <div className="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
-                  <div className="flex items-center space-x-2 text-xs text-red-300">
+                <div className="mt-4 p-3 bg-destructive/20 border border-destructive/30 rounded-lg">
+                  <div className="flex items-center space-x-2 text-xs text-destructive-foreground">
                     <AlertCircle className="h-3 w-3" />
                     <span>{modelsError}</span>
                   </div>
