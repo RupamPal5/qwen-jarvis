@@ -1,0 +1,9 @@
+Create file `tests/test_tri_node.py`.
+
+Write pytest functions:
+1. `test_alpha_generates_valid_payload()` - Tests Node-Alpha output format
+2. `test_beta_detects_malicious_code()` - Tests Node-Beta security scanning
+3. `test_gamma_executes_approved_code()` - Tests Node-Gamma compilation
+4. `test_permission_gate_blocks_unauthorized()` - Tests user authorization flow
+
+Include mock Ollama API responses for testing without actual models running.

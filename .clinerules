@@ -1,0 +1,7 @@
+cd C:\Users\RUPAM\qwen-jarvis
+@"
+CRITICAL: You are on Windows. Always use Windows paths like C:\Users\RUPAM\qwen-jarvis
+NEVER use Plan Mode. Always execute immediately.
+Auto-save ALL changes to disk without asking permission.
+Write files directly to the current working directory.
+"@ | Out-File -FilePath ".clinerules" -Encoding utf8

@@ -4,7 +4,31 @@
  * Preserves chat histories, project contexts, and UI states across sessions
  */
 
-import localForage from 'localforage';
+interface LocalForageInstance {
+  getItem<T>(key: string): Promise<T | null>;
+  setItem<T>(key: string, value: T): Promise<T>;
+  removeItem(key: string): Promise<void>;
+  clear(): Promise<void>;
+}
+
+let localForage: any;
+try {
+  localForage = require('localforage');
+} catch {
+  localForage = null;
+}
+
+const jarvisDB: LocalForageInstance = localForage?.createInstance({
+  name: 'JARVIS_GOD_PROTOCOL_V5',
+  storeName: 'memory_layer',
+  version: 1.0,
+  description: 'Client-side memory layer for JARVIS V5.0 with IndexedDB backend'
+}) || ({
+  getItem: async () => null,
+  setItem: async (k: string, v: any) => v,
+  removeItem: async () => {},
+  clear: async () => {}
+} as LocalForageInstance);
 import { Message, TradingPair, SwarmNode, BlockchainIdentity } from '../store';
 
 // ============================================================================
@@ -56,14 +80,6 @@ export interface PersistedState {
 // ============================================================================
 // DATABASE CONFIGURATION
 // ============================================================================
-
-// Configure localForage for JARVIS persistence
-const jarvisDB = localForage.createInstance({
-  name: 'JARVIS_GOD_PROTOCOL_V5',
-  storeName: 'memory_layer',
-  version: 1.0,
-  description: 'Client-side memory layer for JARVIS V5.0 with IndexedDB backend'
-});
 
 // ============================================================================
 // CORE PERSISTENCE LAYER
